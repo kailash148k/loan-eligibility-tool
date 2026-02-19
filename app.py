@@ -9,7 +9,7 @@ st.title("⚖️ Loan Eligibility Assessment Tool")
 st.subheader("CA KAILASH MALI | 7737306376 | Udaipur")
 
 # PART 2: DYNAMIC APPLICANT DETAILS
-st.header("1. Applicant Details & Demographics")
+st.header("1. Applicant Details & Financials")
 num_apps = st.number_input("How many applicants (1-10)?", min_value=1, max_value=10, value=1)
 
 total_app_income = 0.0
@@ -48,6 +48,7 @@ if st.button("➕ Add Existing Loan"):
         "add_back": True, "obligate": True
     })
 
+# IMPORTANT: Initialize these at 0 so math works even with NO loans
 total_interest_addback_fy = 0.0
 total_existing_emi_impact = 0.0
 
@@ -62,7 +63,6 @@ for idx, loan in enumerate(st.session_state.loans):
             st.session_state.loans[idx]['emi'] = st.number_input(f"Monthly EMI", value=loan['emi'], key=f"le_{idx}")
             st.session_state.loans[idx]['roi'] = st.number_input(f"ROI (%)", value=loan['roi'], key=f"lr_{idx}")
         with l3:
-            # RESTORED: Loan Start Date
             st.session_state.loans[idx]['start'] = st.date_input(f"Loan Start Date", value=loan['start'], key=f"ls_{idx}")
             st.session_state.loans[idx]['closure'] = st.date_input(f"Loan Closure Date", value=loan['closure'], key=f"lc_{idx}")
         with l4:
@@ -97,7 +97,7 @@ with col_p2:
 with col_p3:
     new_tenure = st.number_input("New Tenure (Years)", value=14)
 
-# Eligibility calculation corrected to work even with 0 existing loans
+# CORRECTED MATH: Works even if Part 2 is empty
 final_cash_profit = total_app_income + total_interest_addback_fy
 monthly_profit = final_cash_profit / 12
 max_emi_allowed = (monthly_profit * (foir / 100)) - total_existing_emi_impact
@@ -107,7 +107,8 @@ if max_emi_allowed > 0:
     n = int(new_tenure * 12)
     max_loan = max_emi_allowed * ((1 - (1 + r)**-n) / r)
     st.success(f"### Maximum Eligible Loan Amount: ₹{max_loan:,.0f}")
+    st.info(f"Monthly Cash Flow for EMI: ₹{max_emi_allowed:,.2f}")
 else:
-    st.error("No eligibility based on FOIR and current income.")
+    st.error("No eligibility based on FOIR and current income. Check if existing EMIs are higher than your allowed FOIR.")
 
 st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
