@@ -17,7 +17,7 @@ client_name = st.sidebar.text_input("Customer Name", placeholder="e.g. Kailash M
 
 if st.sidebar.button("💾 Save Customer Profile"):
     if client_name:
-        # Saving all current session state values for this client
+        # Saving all session state for this client
         st.session_state.db[client_name] = {k: v for k, v in st.session_state.items() if k != 'db'}
         st.sidebar.success(f"Profile for '{client_name}' saved!")
     else:
@@ -33,7 +33,7 @@ if st.sidebar.button("🔄 Load Profile"):
             st.session_state[k] = v
         st.rerun()
 
-# --- PART 2: 3-YEAR HISTORICAL FINANCIALS & INDIVIDUAL FOIR ---
+# --- PART 2: 3-YEAR FINANCIALS & INDIVIDUAL FOIR ---
 st.header("1. Applicant Details & 3-Year Financials")
 curr_fy = st.selectbox("Current Assessment FY", ["FY 2024-25", "FY 2025-26"], index=0, key="global_fy")
 base_year = int(curr_fy.split(" ")[1].split("-")[0])
@@ -59,13 +59,13 @@ for i in range(int(num_apps)):
                 st.markdown(f"### {yr}")
                 npbt = st.number_input(f"NPBT", key=f"npbt_{i}_{idx}", value=0.0)
                 dep = st.number_input(f"Depreciation", key=f"dep_{i}_{idx}", value=0.0)
-                int_tl = st.number_input(f"Int Add-back", key=f"int_{i}_{idx}", value=0.0)
+                int_tl_man = st.number_input(f"Manual Int Add-back", key=f"int_{i}_{idx}", value=0.0)
                 fam_sal = st.number_input(f"Family Salary", key=f"fs_{i}_{idx}", value=0.0)
                 curr_rent = st.number_input(f"Current Rent", key=f"cr_{i}_{idx}", value=0.0)
                 fut_rent = st.number_input(f"Future Rent", key=f"fr_{i}_{idx}", value=0.0)
                 
                 f_dep = min(dep, max(0.0, npbt)) if st.checkbox("Restrict Dep", key=f"re_{i}_{idx}", value=True) else dep
-                cash_flow = npbt + f_dep + int_tl + fam_sal + curr_rent + fut_rent
+                cash_flow = npbt + f_dep + int_tl_man + fam_sal + curr_rent + fut_rent
                 annual_cash_flows.append(cash_flow)
 
         avg_profit = (sum(annual_cash_flows[:2])/2) if avg_m == "Latest 2 Years" else (sum(annual_cash_flows)/3)
@@ -73,24 +73,51 @@ for i in range(int(num_apps)):
         total_emi_capacity += cap
         st.success(f"Monthly EMI Capacity for App {i+1}: ₹{cap:,.0f}")
 
-# --- PART 3: OBLIGATIONS & LOANS ---
+# --- PART 3: OBLIGATIONS & INTEREST ADD-BACK ---
 st.divider()
-st.header("2. Current Monthly Obligations")
-manual_emi = st.number_input("Manual Total EMI Entry", value=0.0, key="manual_emi")
+st.header("2. Current Monthly Obligations & Detailed Loan Analysis")
+manual_emi = st.number_input("Manual Total EMI Entry (Non-detailed)", value=0.0, key="manual_emi")
 
 if 'loans' not in st.session_state: st.session_state.loans = []
 if st.button("➕ Add Detailed Loan"):
-    st.session_state.loans.append({"amt": 0.0, "emi": 0.0, "roi": 9.0, "closure": date(2030, 3, 31)})
+    st.session_state.loans.append({"amt": 0.0, "emi": 0.0, "roi": 9.0, "start": date(2021, 4, 1), "closure": date(2030, 3, 31)})
 
-detailed_emi = 0.0
+total_detailed_emi = 0.0
+total_auto_interest_addback = 0.0
+
 for idx, loan in enumerate(st.session_state.loans):
     with st.container(border=True):
-        l1, l2, l3 = st.columns(3)
-        with l1: st.number_input(f"Loan Amt", key=f"la_{idx}", value=0.0)
-        with l2: 
-            emi_val = st.number_input(f"Monthly EMI", key=f"le_{idx}", value=0.0)
-            if st.checkbox("Obligate?", key=f"lob_{idx}", value=True): detailed_emi += emi_val
-        with l3: st.date_input("Closure Date", key=f"lc_{idx}")
+        st.write(f"**Detailed Loan {idx+1}**")
+        l1, l2, l3, l4 = st.columns(4)
+        with l1:
+            amt = st.number_input(f"Original Loan Amount", key=f"la_{idx}", value=loan['amt'])
+            roi = st.number_input(f"ROI %", key=f"lr_{idx}", value=loan['roi'])
+        with l2:
+            emi = st.number_input(f"Monthly EMI", key=f"le_{idx}", value=loan['emi'])
+            start = st.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
+        with l3:
+            closure = st.date_input("Closure Date", key=f"lc_{idx}", value=loan['closure'])
+            # RESTORED: Add Interest to Income Toggle
+            add_int = st.checkbox("Add Interest to Income?", key=f"lab_{idx}", value=True)
+        with l4:
+            # RESTORED: Obligate EMI Toggle
+            obligate = st.checkbox("Obligate EMI?", key=f"lob_{idx}", value=True)
+
+        if amt > 0 and emi > 0:
+            temp_bal = amt
+            for y in range(start.year, 2036):
+                yr_int = temp_bal * (roi / 100)
+                temp_bal = max(0, temp_bal - ((emi * 12) - yr_int))
+                # Add interest back for current financial year
+                if y == base_year and add_int:
+                    total_auto_interest_addback += yr_int
+
+        if obligate and date.today() < closure:
+            total_detailed_emi += emi
+
+total_emi_load = manual_emi + total_detailed_emi
+# Convert total yearly interest add-back to monthly and apply FOIR (since it's income)
+monthly_interest_addback_capacity = (total_auto_interest_addback / 12) * (app_foir / 100) 
 
 # --- PART 4: FINAL ELIGIBILITY ---
 st.divider()
@@ -99,15 +126,18 @@ p1, p2, p3 = st.columns(3)
 with p1: n_roi = st.number_input("New Rate %", value=9.5, key="n_roi")
 with p2: n_ten = st.number_input("New Tenure (Yrs)", value=15, key="n_ten")
 
-total_emi_load = manual_emi + detailed_emi
-max_new_emi = total_emi_capacity - total_emi_load
+# Calculation: (Sum of Individual EMI Cap + Monthly Addback Cap) - Total Obligations
+max_new_emi = (total_emi_capacity + monthly_interest_addback_capacity) - total_emi_load
+
+
 
 if max_new_emi > 0:
     r = (n_roi/12)/100
     n = n_ten * 12
     max_loan = max_new_emi * ((1 - (1 + r)**-n) / r)
     st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
+    st.info(f"Total Int. Add-back included in Income: ₹{total_auto_interest_addback:,.0f}")
 else:
     st.error("No eligibility found based on FOIR and obligations.")
 
-st.sidebar.markdown(f"**CA KAILASH MALI**\nUdaipur")
+st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
