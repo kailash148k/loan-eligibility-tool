@@ -8,13 +8,13 @@ st.set_page_config(page_title="Loan Eligibility Master", layout="wide")
 st.title("⚖️ Loan Eligibility Assessment Tool")
 st.subheader("CA KAILASH MALI | 7737306376 | Udaipur")
 
-# PART 2: DYNAMIC APPLICANT SELECTION
+# PART 2: APPLICANT SELECTION
 st.header("1. Applicant Details")
 num_apps = st.number_input("How many applicants (1-10)?", min_value=1, max_value=10, value=1)
 
 total_annual_profit = 0.0
 
-# PART 3: JOINT INCOME LOOP
+# PART 3: DETAILED INCOME LOOP
 for i in range(int(num_apps)):
     with st.expander(f"Applicant {i+1} Details & Financials", expanded=True):
         col_name, col_dob = st.columns(2)
@@ -25,6 +25,7 @@ for i in range(int(num_apps)):
             age = date.today().year - dob.year
             st.caption(f"Age: {age} Years")
         
+        st.write("**Business/Professional Income**")
         c1, c2, c3 = st.columns(3)
         with c1:
             npbt = st.number_input(f"NPBT (App {i+1})", value=0.0, key=f"npbt_{i}")
@@ -32,13 +33,25 @@ for i in range(int(num_apps)):
             dep = st.number_input(f"Depreciation (App {i+1})", value=0.0, key=f"dep_{i}")
         with c3:
             res = st.checkbox(f"Restrict Dep to NPBT (App {i+1})", value=True, key=f"res_{i}")
-            sal = st.number_input(f"Other Income (App {i+1})", value=0.0, key=f"sal_{i}")
         
-        # PART 4: CA SPECIFIC CASH PROFIT LOGIC
-        f_dep = min(dep, max(0.0, npbt)) if res else dep
-        total_annual_profit += (npbt + f_dep + sal)
+        st.write("**Other Income Heads**")
+        c4, c5, c6 = st.columns(3)
+        with c4:
+            net_sal = st.number_input(f"Net Salary (App {i+1})", value=0.0, key=f"ns_{i}")
+            rent = st.number_input(f"House Rent Income (App {i+1})", value=0.0, key=f"hr_{i}")
+        with c5:
+            term_int = st.number_input(f"Interest on Term Loan (App {i+1})", value=0.0, key=f"ti_{i}")
+            fam_sal = st.number_input(f"Salary to Family Members (App {i+1})", value=0.0, key=f"fs_{i}")
+        with c6:
+            fut_rent = st.number_input(f"Future Rental Income (App {i+1})", value=0.0, key=f"fr_{i}")
 
-# PART 5: OBLIGATIONS & BANK POLICY
+        # CALCULATION LOGIC
+        f_dep = min(dep, max(0.0, npbt)) if res else dep
+        # Adding all heads back to cash flow as per banking norms
+        app_total_income = npbt + f_dep + net_sal + rent + term_int + fam_sal + fut_rent
+        total_annual_profit += app_total_income
+
+# PART 4: OBLIGATIONS & POLICY
 st.header("2. Bank Policy & Obligations")
 col_obs, col_foir, col_roi, col_ten = st.columns(4)
 with col_obs:
@@ -53,9 +66,9 @@ with col_ten:
 monthly_income = total_annual_profit / 12
 max_emi_allowed = (monthly_income * (foir / 100)) - running_emi
 
-# PART 6: RESULTS & 14-YEAR SCHEDULE
+# PART 5: RESULTS & SCHEDULE
 st.divider()
-st.header("3. Maximum Eligibility Results")
+st.header("3. Final Eligibility Results")
 
 if max_emi_allowed > 0:
     r = (roi / 12) / 100
