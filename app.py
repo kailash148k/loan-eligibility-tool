@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import date, datetime
+from dateutil.relativedelta import relativedelta
 
-st.set_page_config(page_title="CA Loan Master", layout="wide")
+st.set_page_config(page_title="CA Loan Master Pro", layout="wide")
 
 # PART 1: BRANDING & JOINT INCOME
 st.title("⚖️ Loan Eligibility Assessment Tool")
@@ -11,7 +12,6 @@ st.subheader("CA KAILASH MALI | 7737306376 | Udaipur")
 
 st.header("1. Income & Cash Profit Analysis")
 num_apps = st.number_input("Number of Applicants", 1, 10, 2)
-total_interest_addback = 0.0
 grand_total_income = 0.0
 
 for i in range(int(num_apps)):
@@ -26,9 +26,10 @@ for i in range(int(num_apps)):
         with col3:
             res = st.checkbox("Restrict Dep to NPBT", value=True, key=f"re_{i}")
             fut_rent = st.number_input(f"Future Rental (App {i+1})", value=0.0, key=f"fr_{i}")
+            fam_sal = st.number_input(f"Family Salary (App {i+1})", value=0.0, key=f"fs_{i}")
         
         f_dep = min(dep, max(0.0, npbt)) if res else dep
-        grand_total_income += (npbt + f_dep + net_sal + rent + fut_rent)
+        grand_total_income += (npbt + f_dep + net_sal + rent + fut_rent + fam_sal)
 
 # PART 2: DETAILED EXISTING LOAN ANALYZER
 st.divider()
@@ -43,14 +44,15 @@ if 'loans' not in st.session_state:
 def add_loan():
     st.session_state.loans.append({
         "type": "Home Loan", "emi": 0.0, "roi": 9.0, "tenure": 120, 
-        "start": date(2022, 1, 1), "moratorium": 0, "add_back": False, "obligate": True
+        "start": date(2022, 1, 1), "closure": date(2032, 1, 1), 
+        "add_back": False, "obligate": True
     })
 
 if st.button("➕ Add Existing Loan Details"):
     add_loan()
 
-total_running_emi = 0.0
-yearly_interest_data = pd.DataFrame(index=[f"FY {y}-{y+1-2000}" for y in range(2021, 2035)])
+total_monthly_emi_impact = 0.0
+total_interest_to_add = 0.0
 
 for idx, loan in enumerate(st.session_state.loans):
     with st.container(border=True):
@@ -62,16 +64,24 @@ for idx, loan in enumerate(st.session_state.loans):
             st.session_state.loans[idx]['emi'] = st.number_input(f"EMI Amount", value=loan['emi'], key=f"le_{idx}")
             st.session_state.loans[idx]['roi'] = st.number_input(f"ROI (%)", value=loan['roi'], key=f"lr_{idx}")
         with c3:
-            st.session_state.loans[idx]['tenure'] = st.number_input(f"Tenure (Months)", value=loan['tenure'], key=f"ltn_{idx}")
             st.session_state.loans[idx]['start'] = st.date_input(f"1st EMI Date", value=loan['start'], key=f"ls_{idx}")
+            st.session_state.loans[idx]['closure'] = st.date_input(f"Loan Closure Date", value=loan['closure'], key=f"lc_{idx}")
         with c4:
             st.session_state.loans[idx]['add_back'] = st.checkbox("Add Interest to Profit?", value=loan['add_back'], key=f"lab_{idx}")
             st.session_state.loans[idx]['obligate'] = st.checkbox("Obligate EMI?", value=loan['obligate'], key=f"lob_{idx}")
 
-        if st.session_state.loans[idx]['obligate']:
-            total_running_emi += st.session_state.loans[idx]['emi']
+        # Logic to check if loan is currently active
+        today = date.today()
+        if st.session_state.loans[idx]['obligate'] and today < st.session_state.loans[idx]['closure']:
+            total_monthly_emi_impact += st.session_state.loans[idx]['emi']
+        
+        # Interest Add-back Calculation (Approximate annual interest based on EMI)
+        if st.session_state.loans[idx]['add_back'] and today < st.session_state.loans[idx]['closure']:
+            # Simplified CA interest add-back logic
+            annual_int = (st.session_state.loans[idx]['emi'] * 12) * (st.session_state.loans[idx]['roi'] / 100)
+            total_interest_to_add += annual_int
 
-# PART 3: CALCULATION & ELIGIBILITY
+# PART 3: NEW LOAN ELIGIBILITY
 st.divider()
 st.header("3. New Loan Parameters & Results")
 col_p1, col_p2, col_p3 = st.columns(3)
@@ -82,23 +92,25 @@ with col_p2:
 with col_p3:
     new_tenure = st.number_input("New Loan Tenure (Years)", value=14)
 
-# Final Calculation
-# As a CA, we add back the interest on existing loans to the profit if selected
-monthly_income = (grand_total_income / 12)
-max_emi_allowed = (monthly_income * (foir / 100)) - total_running_emi
+# Eligibility Logic
+adjusted_annual_income = grand_total_income + total_interest_to_add
+monthly_income = (adjusted_annual_income / 12)
+max_emi_allowed = (monthly_income * (foir / 100)) - total_monthly_emi_impact
+
+
 
 if max_emi_allowed > 0:
     r = (new_roi / 12) / 100
     n = new_tenure * 12
     max_loan = max_emi_allowed * ((1 - (1 + r)**-n) / r)
     
-    st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
+    st.success(f"### Maximum Eligible Loan Amount: ₹{max_loan:,.0f}")
     
-    # Yearly Schedule Table
-    st.write("### 14-Year Principal/Interest Projection")
+    # 14-Year Principal/Interest Projection Table
+    st.write("### 14-Year Projection Table (FY 2021 to FY 2035)")
     res_data = []
     bal = max_loan
-    for y in range(2022, 2036):
+    for y in range(2021, 2036):
         y_int = bal * (new_roi / 100)
         y_pri = (max_emi_allowed * 12) - y_int
         bal = max(0, bal - y_pri)
@@ -107,6 +119,6 @@ if max_emi_allowed > 0:
     df_final = pd.DataFrame(res_data, columns=["Financial Year", "Interest Paid", "Principal Paid", "Closing Balance"])
     st.table(df_final.style.format({"Interest Paid": "₹{:,.0f}", "Principal Paid": "₹{:,.0f}", "Closing Balance": "₹{:,.0f}"}))
 else:
-    st.error("No eligibility based on FOIR and Running Obligations.")
+    st.error("No eligibility based on FOIR and current running obligations.")
 
 st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
