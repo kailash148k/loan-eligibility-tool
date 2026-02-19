@@ -32,11 +32,13 @@ for i in range(int(num_apps)):
                 st.markdown(f"### {yr}")
                 npbt = st.number_input(f"NPBT ({yr})", key=f"npbt_{i}_{idx}", value=0.0)
                 dep = st.number_input(f"Depreciation ({yr})", key=f"dep_{i}_{idx}", value=0.0)
-                int_tl = st.number_input(f"Manual Interest Add-back ({yr})", key=f"int_{i}_{idx}", value=0.0)
+                int_tl_man = st.number_input(f"Manual Interest Add-back ({yr})", key=f"int_{i}_{idx}", value=0.0)
                 fam_sal = st.number_input(f"Family Salary ({yr})", key=f"fs_{i}_{idx}", value=0.0)
+                curr_rent = st.number_input(f"Current Rent ({yr})", key=f"cr_{i}_{idx}", value=0.0)
+                fut_rent = st.number_input(f"Future Rental ({yr})", key=f"fr_{i}_{idx}", value=0.0)
                 
                 f_dep = min(dep, max(0.0, npbt)) if st.checkbox("Restrict Dep", key=f"re_{i}_{idx}", value=True) else dep
-                cash_flow = npbt + f_dep + int_tl + fam_sal
+                cash_flow = npbt + f_dep + int_tl_man + fam_sal + curr_rent + fut_rent
                 annual_cash_flows.append(cash_flow)
                 st.caption(f"Cash Profit: ₹{cash_flow:,.0f}")
 
@@ -51,16 +53,17 @@ col_obs1, col_obs2 = st.columns(2)
 with col_obs1:
     manual_emi = st.number_input("Total Monthly EMIs (Manual Entry)", value=0.0)
 
-# Detailed Loan Logic
 if 'loans' not in st.session_state: st.session_state.loans = []
 if st.button("➕ Add Detailed Existing Loan"):
     st.session_state.loans.append({"amt": 0.0, "emi": 0.0, "roi": 9.0, "start": date(2021, 4, 1), "closure": date(2030, 3, 31)})
 
 total_detailed_emi = 0.0
+total_auto_interest_addback = 0.0
+
 for idx, loan in enumerate(st.session_state.loans):
     with st.container(border=True):
         st.write(f"**Detailed Loan {idx+1} Analysis**")
-        l1, l2, l3 = st.columns(3)
+        l1, l2, l3, l4 = st.columns(4)
         with l1:
             amt = st.number_input(f"Original Loan Amount", key=f"la_{idx}", value=loan['amt'])
             roi = st.number_input(f"ROI %", key=f"lr_{idx}", value=loan['roi'])
@@ -69,22 +72,26 @@ for idx, loan in enumerate(st.session_state.loans):
             start = st.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
         with l3:
             closure = st.date_input("Closure Date", key=f"lc_{idx}", value=loan['closure'])
-            if date.today() < closure: total_detailed_emi += emi
-
-        # Interest Add-back Calculation for the Analysis year
+            # RESTORED: Add Interest to Income Toggle
+            add_int_to_inc = st.checkbox("Add Interest to Income?", key=f"lab_{idx}", value=True)
+        with l4:
+            # RESTORED: Obligate EMI Toggle
+            is_obligated = st.checkbox("Obligate EMI?", key=f"lob_{idx}", value=True)
+            
         if amt > 0 and emi > 0:
-            loan_sched = []
             temp_bal = amt
             for y in range(start.year, 2036):
                 yr_int = temp_bal * (roi / 100)
                 temp_bal = max(0, temp_bal - ((emi * 12) - yr_int))
-                if y >= 2021: loan_sched.append([f"FY {y}-{str(y+1)[2:]}", yr_int, temp_bal])
-            
-            if st.checkbox(f"Show Schedule (Loan {idx+1})", key=f"show_{idx}"):
-                st.table(pd.DataFrame(loan_sched, columns=["Year", "Interest", "Balance"]).style.format("₹{:,.0f}"))
+                # Auto Add-back for the current FY (e.g., 2025)
+                if y == base_year and add_int_to_inc:
+                    total_auto_interest_addback += yr_int
+
+        if is_obligated and date.today() < closure:
+            total_detailed_emi += emi
 
 final_total_emi = manual_emi + total_detailed_emi
-st.info(f"Total Combined EMI Obligation: ₹{final_total_emi:,.0f}")
+st.info(f"Total Monthly Obligation: ₹{final_total_emi:,.0f} | Total Interest Add-back: ₹{total_auto_interest_addback:,.0f}")
 
 # PART 4: FINAL ELIGIBILITY
 st.divider()
@@ -94,10 +101,15 @@ with p1: foir = st.slider("FOIR %", 40, 80, 60)
 with p2: n_roi = st.number_input("New Rate %", value=9.5)
 with p3: n_ten = st.number_input("New Tenure (Yrs)", value=15)
 
-max_loan = (((total_avg_cash_profit / 12) * (foir / 100)) - final_total_emi) * ((1 - (1 + ((n_roi/12)/100))**-(n_ten*12)) / ((n_roi/12)/100))
+# Calculation including auto-calculated interest from running loans
+final_cash_flow_monthly = ((total_avg_cash_profit + total_auto_interest_addback) / 12)
+r_val = (n_roi/12)/100
+n_val = n_ten * 12
+max_loan = ((final_cash_flow_monthly * (foir / 100)) - final_total_emi) * ((1 - (1 + r_val)**-n_val) / r_val)
+
 if max_loan > 0:
     st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
 else:
-    st.error("No eligibility found.")
+    st.error("No eligibility found based on current cash flow and obligations.")
 
 st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
