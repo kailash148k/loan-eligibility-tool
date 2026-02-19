@@ -6,8 +6,6 @@ st.set_page_config(page_title="Loan Eligibility Master", layout="wide")
 st.title("⚖️ Loan Eligibility Assessment Tool")
 st.subheader("CA KAILASH MALI - 7737306376")
 
-APPLICANT DETAILS
-st.header("1. Applicant Details")
 num_apps = st.number_input("Total Number of Applicants", 1, 4, 1)
 applicants = []
 
@@ -23,10 +21,7 @@ age = date.today().year - dob.year
 st.caption(f"Age: {age} Years")
 applicants.append({"Name": name, "Age": age})
 
-INCOME AND CASH PROFIT
-st.header("2. Income & Cash Profit Analysis")
 total_annual_profit = 0
-
 for i in range(int(num_apps)):
 with st.expander(f"Financials: {applicants[i]['Name'] or f'Applicant {i+1}'}", expanded=True):
 c1, c2 = st.columns(2)
@@ -41,8 +36,6 @@ else:
 final_dep = dep
 total_annual_profit += (npbt + final_dep)
 
-EXISTING OBLIGATIONS
-st.header("3. Existing Debt Obligations")
 num_loans = st.number_input("Number of Existing Loans", 0, 5, 0)
 total_monthly_obligation = 0
 
@@ -58,8 +51,6 @@ status = st.selectbox(f"Status (Loan {j+1})", ["Obligated (Running)", "To be Clo
 if status == "Obligated (Running)":
 total_monthly_obligation += emi
 
-FINAL ELIGIBILITY
-st.header("4. Final Eligibility Results")
 foir = st.slider("FOIR % (Bank Policy)", 40, 80, 60)
 monthly_income = total_annual_profit / 12
 max_allowed_emi = (monthly_income * (foir / 100)) - total_monthly_obligation
@@ -84,6 +75,6 @@ max_loan = max_allowed_emi * n
 if max_loan > 0:
 st.success(f"### Maximum Eligible Loan Amount: ₹{max_loan:,.0f}")
 else:
-st.error("Based on existing obligations and FOIR, the applicant is not eligible for a new loan.")
+st.error("Not eligible for a new loan based on FOIR.")
 
 st.sidebar.markdown(f"CA KAILASH MALI\n7737306376")
