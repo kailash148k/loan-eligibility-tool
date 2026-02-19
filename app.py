@@ -6,7 +6,7 @@ st.set_page_config(page_title="Loan Eligibility Master", layout="wide")
 st.title("⚖️ Loan Eligibility Assessment Tool")
 st.subheader("CA KAILASH MALI - 7737306376")
 
-1. APPLICANT DETAILS
+APPLICANT DETAILS
 st.header("1. Applicant Details")
 num_apps = st.number_input("Total Number of Applicants", 1, 4, 1)
 applicants = []
@@ -23,7 +23,7 @@ age = date.today().year - dob.year
 st.caption(f"Age: {age} Years")
 applicants.append({"Name": name, "Age": age})
 
-2. INCOME & CASH PROFIT
+INCOME AND CASH PROFIT
 st.header("2. Income & Cash Profit Analysis")
 total_annual_profit = 0
 
@@ -41,7 +41,7 @@ else:
 final_dep = dep
 total_annual_profit += (npbt + final_dep)
 
-3. EXISTING OBLIGATIONS (The 14-Year Logic)
+EXISTING OBLIGATIONS
 st.header("3. Existing Debt Obligations")
 num_loans = st.number_input("Number of Existing Loans", 0, 5, 0)
 total_monthly_obligation = 0
@@ -58,7 +58,7 @@ status = st.selectbox(f"Status (Loan {j+1})", ["Obligated (Running)", "To be Clo
 if status == "Obligated (Running)":
 total_monthly_obligation += emi
 
-4. FINAL ELIGIBILITY
+FINAL ELIGIBILITY
 st.header("4. Final Eligibility Results")
 foir = st.slider("FOIR % (Bank Policy)", 40, 80, 60)
 monthly_income = total_annual_profit / 12
@@ -70,9 +70,8 @@ with col_res1:
 st.metric("Total Monthly Cash Profit", f"₹{monthly_income:,.2f}")
 st.metric("Existing EMI Deducted", f"₹{total_monthly_obligation:,.2f}")
 with col_res2:
-st.metric("Max New EMI Allowed", f"₹{max_allowed_emi:,.2f}", delta_color="normal")
+st.metric("Max New EMI Allowed", f"₹{max_allowed_emi:,.2f}")
 
-Loan Amount Calculation
 roi = st.number_input("Interest Rate (%)", value=9.5)
 tenure = st.number_input("Tenure (Years)", value=15)
 r = (roi / 12) / 100
