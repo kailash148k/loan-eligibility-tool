@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from datetime import date, datetime
-from dateutil.relativedelta import relativedelta
+from datetime import date
 
 st.set_page_config(page_title="CA Loan Master Pro", layout="wide")
 
@@ -41,15 +39,12 @@ prop_types = ["Residential House", "Commercial Building", "Vacant Plot", "Rented
 if 'loans' not in st.session_state:
     st.session_state.loans = []
 
-def add_loan():
+if st.button("➕ Add Existing Loan"):
     st.session_state.loans.append({
-        "type": "Home Loan", "emi": 0.0, "roi": 9.0, "tenure": 120, 
-        "start": date(2022, 1, 1), "closure": date(2032, 1, 1), 
+        "type": "Home Loan", "emi": 0.0, "roi": 9.0, 
+        "start": date(2022, 4, 1), "closure": date(2032, 3, 31), 
         "add_back": False, "obligate": True
     })
-
-if st.button("➕ Add Existing Loan Details"):
-    add_loan()
 
 total_monthly_emi_impact = 0.0
 total_interest_to_add = 0.0
@@ -70,44 +65,36 @@ for idx, loan in enumerate(st.session_state.loans):
             st.session_state.loans[idx]['add_back'] = st.checkbox("Add Interest to Profit?", value=loan['add_back'], key=f"lab_{idx}")
             st.session_state.loans[idx]['obligate'] = st.checkbox("Obligate EMI?", value=loan['obligate'], key=f"lob_{idx}")
 
-        # Logic to check if loan is currently active
         today = date.today()
         if st.session_state.loans[idx]['obligate'] and today < st.session_state.loans[idx]['closure']:
             total_monthly_emi_impact += st.session_state.loans[idx]['emi']
         
-        # Interest Add-back Calculation (Approximate annual interest based on EMI)
         if st.session_state.loans[idx]['add_back'] and today < st.session_state.loans[idx]['closure']:
-            # Simplified CA interest add-back logic
-            annual_int = (st.session_state.loans[idx]['emi'] * 12) * (st.session_state.loans[idx]['roi'] / 100)
-            total_interest_to_add += annual_int
+            # CA Logic: Approx Interest add-back
+            total_interest_to_add += (st.session_state.loans[idx]['emi'] * 12) * 0.6 # Assuming 60% of EMI is interest initially
 
-# PART 3: NEW LOAN ELIGIBILITY
+# PART 3: RESULTS
 st.divider()
-st.header("3. New Loan Parameters & Results")
+st.header("3. New Loan Eligibility")
 col_p1, col_p2, col_p3 = st.columns(3)
 with col_p1:
     foir = st.slider("FOIR %", 40, 80, 60)
 with col_p2:
-    new_roi = st.number_input("New Loan ROI (%)", value=9.5)
+    new_roi = st.number_input("New ROI (%)", value=9.5)
 with col_p3:
-    new_tenure = st.number_input("New Loan Tenure (Years)", value=14)
+    new_tenure = st.number_input("New Tenure (Years)", value=14)
 
-# Eligibility Logic
-adjusted_annual_income = grand_total_income + total_interest_to_add
-monthly_income = (adjusted_annual_income / 12)
+monthly_income = (grand_total_income + total_interest_to_add) / 12
 max_emi_allowed = (monthly_income * (foir / 100)) - total_monthly_emi_impact
-
-
 
 if max_emi_allowed > 0:
     r = (new_roi / 12) / 100
     n = new_tenure * 12
     max_loan = max_emi_allowed * ((1 - (1 + r)**-n) / r)
+    st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
     
-    st.success(f"### Maximum Eligible Loan Amount: ₹{max_loan:,.0f}")
-    
-    # 14-Year Principal/Interest Projection Table
-    st.write("### 14-Year Projection Table (FY 2021 to FY 2035)")
+    # Yearly Principal/Interest Table
+    st.write("### Principal/Interest Projection (FY 2021-2035)")
     res_data = []
     bal = max_loan
     for y in range(2021, 2036):
@@ -116,9 +103,9 @@ if max_emi_allowed > 0:
         bal = max(0, bal - y_pri)
         res_data.append([f"FY {y}-{y+1-2000}", y_int, y_pri, bal])
     
-    df_final = pd.DataFrame(res_data, columns=["Financial Year", "Interest Paid", "Principal Paid", "Closing Balance"])
-    st.table(df_final.style.format({"Interest Paid": "₹{:,.0f}", "Principal Paid": "₹{:,.0f}", "Closing Balance": "₹{:,.0f}"}))
+    df = pd.DataFrame(res_data, columns=["Financial Year", "Interest", "Principal", "Balance"])
+    st.table(df.style.format("₹{:,.0f}"))
 else:
-    st.error("No eligibility based on FOIR and current running obligations.")
+    st.error("No eligibility found.")
 
-st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
+st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376")
