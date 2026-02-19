@@ -2,14 +2,11 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-# Basic Page Config
 st.set_page_config(page_title="Loan Eligibility Master", layout="wide")
-
-# Header with your Branding
 st.title("⚖️ Loan Eligibility Assessment Tool")
 st.subheader("CA KAILASH MALI - 7737306376")
 
-# PART 6: APPLICANT DEMOGRAPHICS
+1. APPLICANT DETAILS
 st.header("1. Applicant Details")
 num_apps = st.number_input("Total Number of Applicants", 1, 4, 1)
 applicants = []
@@ -22,44 +19,72 @@ with col2:
 pan = st.text_input(f"PAN (App {i+1})", key=f"p{i}")
 with col3:
 dob = st.date_input(f"DOB (App {i+1})", date(1990, 1, 1), key=f"d{i}")
-age = date.today().year - dob.year - ((date.today().month, date.today().day) < (dob.month, dob.day))
-st.caption(f"Calculated Age: {age} Years")
+age = date.today().year - dob.year
+st.caption(f"Age: {age} Years")
 applicants.append({"Name": name, "Age": age})
 
-st.divider()
-
-PART 1: JOINT CASH PROFIT (With your specific CA Logic)
-st.header("2. Joint Income & Cash Profit Analysis")
+2. INCOME & CASH PROFIT
+st.header("2. Income & Cash Profit Analysis")
 total_annual_profit = 0
 
 for i in range(int(num_apps)):
 with st.expander(f"Financials: {applicants[i]['Name'] or f'Applicant {i+1}'}", expanded=True):
-c1, c2, c3 = st.columns(3)
+c1, c2 = st.columns(2)
 with c1:
-npbt = st.number_input(f"NPBT", key=f"np{i}", value=0.0)
-sal = st.number_input(f"Salary/Rent", key=f"s{i}", value=0.0)
+npbt = st.number_input(f"NPBT (App {i+1})", value=0.0, key=f"np{i}")
+dep = st.number_input(f"Depreciation (App {i+1})", value=0.0, key=f"dp{i}")
 with c2:
-dep = st.number_input(f"Depreciation", key=f"dp{i}", value=0.0)
-restrict = st.checkbox("Restrict Dep. to 100% of NPBT", key=f"r{i}")
+restrict = st.checkbox(f"Restrict Dep to NPBT (App {i+1})", key=f"r{i}")
+if restrict:
+final_dep = min(dep, max(0.0, npbt))
+else:
+final_dep = dep
+total_annual_profit += (npbt + final_dep)
+
+3. EXISTING OBLIGATIONS (The 14-Year Logic)
+st.header("3. Existing Debt Obligations")
+num_loans = st.number_input("Number of Existing Loans", 0, 5, 0)
+total_monthly_obligation = 0
+
+if num_loans > 0:
+for j in range(int(num_loans)):
+col_l1, col_l2, col_l3 = st.columns(3)
+with col_l1:
+l_name = st.text_input(f"Bank Name (Loan {j+1})", key=f"ln{j}")
+with col_l2:
+emi = st.number_input(f"EMI Amount (Loan {j+1})", value=0.0, key=f"le{j}")
+with col_l3:
+status = st.selectbox(f"Status (Loan {j+1})", ["Obligated (Running)", "To be Closed"], key=f"ls{j}")
+if status == "Obligated (Running)":
+total_monthly_obligation += emi
+
+4. FINAL ELIGIBILITY
+st.header("4. Final Eligibility Results")
+foir = st.slider("FOIR % (Bank Policy)", 40, 80, 60)
+monthly_income = total_annual_profit / 12
+max_allowed_emi = (monthly_income * (foir / 100)) - total_monthly_obligation
 
 st.divider()
-
-PART 4 & 5: ELIGIBILITY CALCULATION
-st.header("3. Final Loan Eligibility")
-monthly_avg_profit = total_annual_profit / 12
-
 col_res1, col_res2 = st.columns(2)
 with col_res1:
-foir = st.slider("FOIR % (Bank Limit)", 40, 80, 60)
-max_emi = monthly_avg_profit * (foir / 100)
-st.metric("Max Allowed EMI", f"₹{max_emi:,.2f}")
-
+st.metric("Total Monthly Cash Profit", f"₹{monthly_income:,.2f}")
+st.metric("Existing EMI Deducted", f"₹{total_monthly_obligation:,.2f}")
 with col_res2:
-roi = st.number_input("Proposed Interest Rate (%)", value=9.5)
+st.metric("Max New EMI Allowed", f"₹{max_allowed_emi:,.2f}", delta_color="normal")
+
+Loan Amount Calculation
+roi = st.number_input("Interest Rate (%)", value=9.5)
 tenure = st.number_input("Tenure (Years)", value=15)
+r = (roi / 12) / 100
+n = tenure * 12
+if r > 0:
+max_loan = max_allowed_emi * ((1 - (1 + r)**-n) / r)
+else:
+max_loan = max_allowed_emi * n
 
-Sidebar
-st.sidebar.markdown(f"Firm: Rajasthan MSME Subsidy Comparison Tool")
-st.sidebar.markdown(f"CA KAILASH MALI")
-st.sidebar.markdown(f"📞 7737306376")
+if max_loan > 0:
+st.success(f"### Maximum Eligible Loan Amount: ₹{max_loan:,.0f}")
+else:
+st.error("Based on existing obligations and FOIR, the applicant is not eligible for a new loan.")
 
+st.sidebar.markdown(f"CA KAILASH MALI\n7737306376")
