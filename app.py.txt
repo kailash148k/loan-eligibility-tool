@@ -1,0 +1,100 @@
+LOAN ELIGIBILITY CALCULATOR - STREAMLIT CODE
+# Paste this entire section into a file named app.py
+
+import streamlit as st
+import pandas as pd
+from datetime import date
+from fpdf import FPDF
+import base64
+
+st.set_page_config(page_title="CA Kailash Mali - Loan Master", layout="wide")
+
+# 1. AGE CALCULATION LOGIC
+def calculate_age(born):
+today = date.today()
+return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+# 2. PDF GENERATOR LOGIC
+def create_pdf(name, loan, emi, age):
+pdf = FPDF()
+pdf.add_page()
+pdf.set_font("Arial", 'B', 16)
+pdf.cell(200, 10, txt="LOAN ELIGIBILITY REPORT", ln=True, align='C')
+pdf.set_font("Arial", size=12)
+pdf.ln(10)
+pdf.cell(200, 10, txt=f"Firm: Rajasthan MSME Subsidy Comparison Tool", ln=True)
+pdf.cell(200, 10, txt=f"CA Kailash Mali - 7737306376", ln=True)
+pdf.ln(5)
+pdf.cell(200, 10, txt=f"Applicant: {name} (Age: {age})", ln=True)
+pdf.cell(200, 10, txt=f"Max Eligible Loan: Rs. {loan:,.0f}", ln=True)
+pdf.cell(200, 10, txt=f"Max Allowed EMI: Rs. {emi:,.0f}", ln=True)
+return pdf.output(dest='S').encode('latin-1')
+
+# PART 6: INITIAL DETAILS
+st.title("⚖️ Rajasthan MSME Subsidy Comparison Tool")
+st.subheader("Professional Loan Eligibility Calculator")
+
+col_kyc1, col_kyc2 = st.columns(2)
+with col_kyc1:
+num_apps = st.number_input("Total Applicants", 1, 4, 1)
+bus_city = st.text_input("City of Business")
+with col_kyc2:
+prop_city = st.text_input("City of Property")
+
+app_list = []
+for i in range(int(num_apps)):
+st.markdown(f"Applicant {i+1} Details")
+c1, c2, c3 = st.columns(3)
+with c1: name = st.text_input(f"Name", key=f"n{i}")
+with c2: pan = st.text_input(f"PAN", key=f"p{i}")
+with c3: dob = st.date_input("DOB", date(1990,1,1), key=f"d{i}")
+age = calculate_age(dob)
+st.caption(f"Age: {age} Years")
+app_list.append({"Name": name, "Age": age})
+
+st.divider()
+
+# PART 1 & 3: CASH PROFIT
+st.header("Income & Cash Profit Analysis")
+base_fy = st.selectbox("Base FY", ["FY 2024-25", "FY 2023-24", "FY 2022-23"])
+avg_opt = st.radio("Average Of", ["Latest 2 Years", "Latest 3 Years"])
+years = [base_fy, "Prev FY 1", "Prev FY 2"]
+
+total_profits = {y: 0.0 for y in years}
+for i in range(int(num_apps)):
+with st.expander(f"Financials: Applicant {i+1}"):
+res_dep = st.checkbox("Restrict Dep. to 100% of NPBT", key=f"rd{i}")
+cols = st.columns(3)
+for idx, y in enumerate(years):
+with cols[idx]:
+npbt = st.number_input(f"NPBT ({y})", key=f"np{i}{idx}")
+dep = st.number_input(f"Depreciation ({y})", key=f"dp{i}{idx}")
+sal = st.number_input(f"Salary/Rent ({y})", key=f"sl{i}{idx}")
+actual_dep = min(dep, npbt) if res_dep and npbt > 0 else (0 if res_dep and npbt <= 0 else dep)
+prof = npbt + actual_dep + sal
+total_profits[y] += prof
+
+# PART 4 & 5: FINAL CALCULATION
+st.divider()
+st.header("Final Eligibility Result")
+
+if avg_opt == "Latest 2 Years": final_avg = (total_profits[years[0]] + total_profits[years[1]]) / 2
+else: final_avg = sum(total_profits.values()) / 3
+
+monthly_surplus = final_avg / 12
+foir = st.slider("FOIR %", 40, 80, 60)
+max_emi = monthly_surplus * (foir / 100)
+
+# Proposed Loan Math
+roi = st.number_input("Proposed ROI %", 9.0)
+tenure = st.number_input("Proposed Tenure (Years)", 15)
+r = (roi / 12) / 100
+n = tenure * 12
+max_loan = max_emi * ((1 - (1 + r)-n) / r) if r > 0 else max_emi * n**
+
+st.metric("Max Eligible Loan", f"₹{max_loan:,.0f}")
+
+if st.button("Download Report"):
+pdf_out = create_pdf(app_list[0]['Name'], max_loan, max_emi, app_list[0]['Age'])
+b64 = base64.b64encode(pdf_out).decode()
+st.markdown(f'<a href="data:application/octet-stream;base64,{b64}" download="Loan_Report.pdf">Click here to Download</a>', unsafe_allow_html=True)
