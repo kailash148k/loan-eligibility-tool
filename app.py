@@ -34,19 +34,28 @@ for i in range(int(num_apps)):
             f_dep = min(dep, max(0.0, npbt)) if res else dep
             total_app_income += (npbt + f_dep + sal_rent)
 
-# PART 3: EXISTING LOAN ANALYZER (SCHEDULE FROM START DATE)
+# PART 3: EXISTING LOAN ANALYZER (HISTORICAL INTEREST ADD-BACK)
 st.divider()
 st.header("2. Existing Loan Analyzer (Interest Add-Back Logic)")
 
 if 'loans' not in st.session_state:
     st.session_state.loans = []
 
-if st.button("➕ Add Existing Loan"):
+def add_loan():
+    # Fix: Initializing ALL required keys to prevent KeyError
     st.session_state.loans.append({
-        "type": "Home Loan", "amt": 0.0, "emi": 0.0, "roi": 9.0, 
-        "start": date(2021, 4, 1), "closure": date(2030, 1, 1), 
-        "add_back": True, "obligate": True
+        "type": "Home Loan",
+        "amt": 0.0,
+        "emi": 0.0,
+        "roi": 9.0,
+        "start": date(2021, 4, 1),
+        "closure": date(2030, 3, 31),
+        "add_back": True,
+        "obligate": True
     })
+
+if st.button("➕ Add Existing Loan Details"):
+    add_loan()
 
 total_interest_addback_fy = 0.0
 total_existing_emi_impact = 0.0
@@ -56,8 +65,7 @@ for idx, loan in enumerate(st.session_state.loans):
         st.write(f"### Loan {idx+1} Analysis")
         l1, l2, l3, l4 = st.columns(4)
         with l1:
-            st.session_state.loans[idx]['type'] = st.selectbox(f"Type", ["Home Loan", "LAP", "PL/BL", "WCTL"], key=f"lt_{idx}")
-            # CHANGED: Now asking for Original Loan Amount
+            st.session_state.loans[idx]['type'] = st.selectbox(f"Type (L{idx})", ["Home Loan", "LAP", "PL/BL", "WCTL"], key=f"lt_{idx}")
             st.session_state.loans[idx]['amt'] = st.number_input(f"Original Loan Amount", value=loan['amt'], key=f"la_{idx}")
         with l2:
             st.session_state.loans[idx]['emi'] = st.number_input(f"Monthly EMI", value=loan['emi'], key=f"le_{idx}")
@@ -69,22 +77,21 @@ for idx, loan in enumerate(st.session_state.loans):
             st.session_state.loans[idx]['add_back'] = st.checkbox("Add Interest to Profit?", value=loan['add_back'], key=f"lab_{idx}")
             st.session_state.loans[idx]['obligate'] = st.checkbox("Obligate EMI?", value=loan['obligate'], key=f"lob_{idx}")
 
+        # CALCULATE HISTORICAL INTEREST ADD-BACK
         if st.session_state.loans[idx]['amt'] > 0 and st.session_state.loans[idx]['emi'] > 0:
-            st.write(f"**Historical & Future Interest Schedule (Loan {idx+1})**")
+            st.write(f"**Historical Interest Schedule (Loan {idx+1})**")
             loan_sched = []
             temp_bal = st.session_state.loans[idx]['amt']
             start_year = st.session_state.loans[idx]['start'].year
             
-            # Calculate from Start Year to Closure
             for y in range(start_year, 2036):
                 yr_interest = temp_bal * (st.session_state.loans[idx]['roi'] / 100)
                 yr_principal = max(0, (st.session_state.loans[idx]['emi'] * 12) - yr_interest)
                 temp_bal = max(0, temp_bal - yr_principal)
                 
-                # Only show and add-back if the year is FY 2021 or later
                 if y >= 2021:
                     loan_sched.append([f"FY {y}-{str(y+1)[2:]}", yr_interest, temp_bal])
-                    # Auto add-back to current eligibility (FY 2025-26)
+                    # Current FY Add-back (2025-26)
                     if y == 2025 and st.session_state.loans[idx]['add_back']:
                         total_interest_addback_fy += yr_interest
             
@@ -117,6 +124,6 @@ if max_emi_allowed > 0:
     st.success(f"### Maximum Eligible Loan Amount: ₹{max_loan:,.0f}")
     st.info(f"FY 2025-26 Interest Add-back Included: ₹{total_interest_addback_fy:,.0f}")
 else:
-    st.error("No eligibility based on FOIR and current income.")
+    st.error("No eligibility based on current profit and obligations.")
 
 st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
