@@ -46,7 +46,7 @@ for i in range(int(num_apps)):
         col_name, col_foir = st.columns([2, 1])
         with col_name:
             st.text_input(f"Name (App {i+1})", key=f"name_{i}")
-            avg_m = st.radio(f"Avg Method", ["Latest 2 Years", "Latest 3 Years"], key=f"avg_m_{i}", horizontal=True)
+            avg_m = st.radio(f"Avg Method (App {i+1})", ["Latest 2 Years", "Latest 3 Years"], key=f"avg_m_{i}", horizontal=True)
         with col_foir:
             app_foir = st.number_input(f"FOIR % (App {i+1})", 10, 100, 60, key=f"foir_{i}")
 
@@ -78,9 +78,23 @@ st.divider()
 st.header("2. Current Monthly Obligations & Detailed Loan Analysis")
 manual_emi = st.number_input("Manual Total EMI Entry (Non-detailed)", value=0.0, key="manual_emi")
 
-if 'loans' not in st.session_state: st.session_state.loans = []
+if 'loans' not in st.session_state: 
+    st.session_state.loans = []
+
+def add_loan():
+    # FIX: Explicitly initialize all keys including 'start' to prevent KeyError
+    st.session_state.loans.append({
+        "amt": 0.0, 
+        "emi": 0.0, 
+        "roi": 9.0, 
+        "start": date(2021, 4, 1), 
+        "closure": date(2030, 3, 31),
+        "add_int": True,
+        "obligate": True
+    })
+
 if st.button("➕ Add Detailed Loan"):
-    st.session_state.loans.append({"amt": 0.0, "emi": 0.0, "roi": 9.0, "start": date(2021, 4, 1), "closure": date(2030, 3, 31)})
+    add_loan()
 
 total_detailed_emi = 0.0
 total_auto_interest_addback = 0.0
@@ -94,30 +108,27 @@ for idx, loan in enumerate(st.session_state.loans):
             roi = st.number_input(f"ROI %", key=f"lr_{idx}", value=loan['roi'])
         with l2:
             emi = st.number_input(f"Monthly EMI", key=f"le_{idx}", value=loan['emi'])
-            start = st.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
+            start_dt = st.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
         with l3:
-            closure = st.date_input("Closure Date", key=f"lc_{idx}", value=loan['closure'])
-            # RESTORED: Add Interest to Income Toggle
-            add_int = st.checkbox("Add Interest to Income?", key=f"lab_{idx}", value=True)
+            closure_dt = st.date_input("Closure Date", key=f"lc_{idx}", value=loan['closure'])
+            add_int_check = st.checkbox("Add Interest to Income?", key=f"lab_{idx}", value=loan['add_int'])
         with l4:
-            # RESTORED: Obligate EMI Toggle
-            obligate = st.checkbox("Obligate EMI?", key=f"lob_{idx}", value=True)
+            obligate_check = st.checkbox("Obligate EMI?", key=f"lob_{idx}", value=loan['obligate'])
 
         if amt > 0 and emi > 0:
             temp_bal = amt
-            for y in range(start.year, 2036):
+            for y in range(start_dt.year, 2036):
                 yr_int = temp_bal * (roi / 100)
                 temp_bal = max(0, temp_bal - ((emi * 12) - yr_int))
-                # Add interest back for current financial year
-                if y == base_year and add_int:
+                if y == base_year and add_int_check:
                     total_auto_interest_addback += yr_int
 
-        if obligate and date.today() < closure:
+        if obligate_check and date.today() < closure_dt:
             total_detailed_emi += emi
 
 total_emi_load = manual_emi + total_detailed_emi
-# Convert total yearly interest add-back to monthly and apply FOIR (since it's income)
-monthly_interest_addback_capacity = (total_auto_interest_addback / 12) * (app_foir / 100) 
+# Convert yearly interest add-back to monthly and apply a standard 60% FOIR for the add-back capacity
+monthly_addback_cap = (total_auto_interest_addback / 12) * 0.60
 
 # --- PART 4: FINAL ELIGIBILITY ---
 st.divider()
@@ -126,18 +137,18 @@ p1, p2, p3 = st.columns(3)
 with p1: n_roi = st.number_input("New Rate %", value=9.5, key="n_roi")
 with p2: n_ten = st.number_input("New Tenure (Yrs)", value=15, key="n_ten")
 
-# Calculation: (Sum of Individual EMI Cap + Monthly Addback Cap) - Total Obligations
-max_new_emi = (total_emi_capacity + monthly_interest_addback_capacity) - total_emi_load
+# Combine base capacity + interest add-back capacity - current obligations
+max_new_emi = (total_emi_capacity + monthly_addback_cap) - total_emi_load
 
 
 
 if max_new_emi > 0:
-    r = (n_roi/12)/100
-    n = n_ten * 12
-    max_loan = max_new_emi * ((1 - (1 + r)**-n) / r)
+    r_rate = (n_roi/12)/100
+    n_months = n_ten * 12
+    max_loan = max_new_emi * ((1 - (1 + r_rate)**-n_months) / r_rate)
     st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
-    st.info(f"Total Int. Add-back included in Income: ₹{total_auto_interest_addback:,.0f}")
+    st.info(f"Total Yearly Int. Add-back from Running Loans: ₹{total_auto_interest_addback:,.0f}")
 else:
     st.error("No eligibility found based on FOIR and obligations.")
 
-st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
+st.sidebar.markdown(f"**CA KAILASH MALI**\nUdaipur, Rajasthan")
