@@ -3,38 +3,62 @@ import pandas as pd
 from datetime import date
 
 Basic Page Config
-st.set_page_config(page_title="CA Kailash Mali - Loan Master", layout="wide")
+st.set_page_config(page_title="Loan Eligibility Master", layout="wide")
 
-App Header
-st.title("⚖️ Rajasthan MSME Subsidy Comparison Tool")
-st.subheader("Professional Loan Eligibility Calculator")
+Header with your Branding
+st.title("⚖️ Loan Eligibility Assessment Tool")
+st.subheader("CA KAILASH MALI - 7737306376")
 
-Part 6: Applicant Details (Simplified for Testing)
+PART 6: APPLICANT DEMOGRAPHICS
 st.header("1. Applicant Details")
-name = st.text_input("Primary Applicant Name")
-if name:
-st.write(f"Processing data for: {name}")
+num_apps = st.number_input("Total Number of Applicants", 1, 4, 1)
+applicants = []
 
-Part 1: Cash Profit Structure
-st.header("2. Cash Profit Calculation")
-col1, col2 = st.columns(2)
+for i in range(int(num_apps)):
+col1, col2, col3 = st.columns(3)
 with col1:
-npbt = st.number_input("Net Profit Before Tax (NPBT)", value=0.0)
-dep = st.number_input("Depreciation", value=0.0)
+name = st.text_input(f"Applicant {i+1} Name", key=f"n{i}")
 with col2:
-restrict_dep = st.checkbox("Restrict Depreciation to 100% of NPBT")
+pan = st.text_input(f"PAN (App {i+1})", key=f"p{i}")
+with col3:
+dob = st.date_input(f"DOB (App {i+1})", date(1990, 1, 1), key=f"d{i}")
+age = date.today().year - dob.year - ((date.today().month, date.today().day) < (dob.month, dob.day))
+st.caption(f"Calculated Age: {age} Years")
+applicants.append({"Name": name, "Age": age})
 
-Logic for Depreciation Add-back
-if restrict_dep:
-final_dep = min(dep, max(0.0, npbt))
-else:
-final_dep = dep
+st.divider()
 
-cash_profit = npbt + final_dep
-st.success(f"Calculated Cash Profit: ₹{cash_profit:,.2f}")
+PART 1: JOINT CASH PROFIT (With your specific CA Logic)
+st.header("2. Joint Income & Cash Profit Analysis")
+total_annual_profit = 0
 
-Sidebar Info
-st.sidebar.markdown("### Developed for:")
-st.sidebar.markdown("CA KAILASH MALI")
-st.sidebar.markdown("📞 7737306376")
-st.sidebar.markdown("📍 Udaipur, Rajasthan")
+for i in range(int(num_apps)):
+with st.expander(f"Financials: {applicants[i]['Name'] or f'Applicant {i+1}'}", expanded=True):
+c1, c2, c3 = st.columns(3)
+with c1:
+npbt = st.number_input(f"NPBT", key=f"np{i}", value=0.0)
+sal = st.number_input(f"Salary/Rent", key=f"s{i}", value=0.0)
+with c2:
+dep = st.number_input(f"Depreciation", key=f"dp{i}", value=0.0)
+restrict = st.checkbox("Restrict Dep. to 100% of NPBT", key=f"r{i}")
+
+st.divider()
+
+PART 4 & 5: ELIGIBILITY CALCULATION
+st.header("3. Final Loan Eligibility")
+monthly_avg_profit = total_annual_profit / 12
+
+col_res1, col_res2 = st.columns(2)
+with col_res1:
+foir = st.slider("FOIR % (Bank Limit)", 40, 80, 60)
+max_emi = monthly_avg_profit * (foir / 100)
+st.metric("Max Allowed EMI", f"₹{max_emi:,.2f}")
+
+with col_res2:
+roi = st.number_input("Proposed Interest Rate (%)", value=9.5)
+tenure = st.number_input("Tenure (Years)", value=15)
+
+Sidebar
+st.sidebar.markdown(f"Firm: Rajasthan MSME Subsidy Comparison Tool")
+st.sidebar.markdown(f"CA KAILASH MALI")
+st.sidebar.markdown(f"📞 7737306376")
