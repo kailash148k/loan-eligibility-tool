@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-Basic Page Config
+# Basic Page Config
 st.set_page_config(page_title="Loan Eligibility Master", layout="wide")
 
-Header with your Branding
+# Header with your Branding
 st.title("⚖️ Loan Eligibility Assessment Tool")
 st.subheader("CA KAILASH MALI - 7737306376")
 
-PART 6: APPLICANT DEMOGRAPHICS
+# PART 6: APPLICANT DEMOGRAPHICS
 st.header("1. Applicant Details")
 num_apps = st.number_input("Total Number of Applicants", 1, 4, 1)
 applicants = []
@@ -62,3 +62,4 @@ Sidebar
 st.sidebar.markdown(f"Firm: Rajasthan MSME Subsidy Comparison Tool")
 st.sidebar.markdown(f"CA KAILASH MALI")
 st.sidebar.markdown(f"📞 7737306376")
+
