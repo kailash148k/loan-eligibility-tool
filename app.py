@@ -34,7 +34,7 @@ for i in range(int(num_apps)):
             f_dep = min(dep, max(0.0, npbt)) if res else dep
             total_app_income += (npbt + f_dep + sal_rent)
 
-# PART 3: EXISTING LOAN ANALYZER (HISTORICAL INTEREST ADD-BACK)
+# PART 3: EXISTING LOAN ANALYZER (FLEXIBLE EMI/TENURE)
 st.divider()
 st.header("2. Existing Loan Analyzer (Interest Add-Back Logic)")
 
@@ -42,16 +42,11 @@ if 'loans' not in st.session_state:
     st.session_state.loans = []
 
 def add_loan():
-    # Fix: Initializing ALL required keys to prevent KeyError
     st.session_state.loans.append({
-        "type": "Home Loan",
-        "amt": 0.0,
-        "emi": 0.0,
-        "roi": 9.0,
-        "start": date(2021, 4, 1),
-        "closure": date(2030, 3, 31),
-        "add_back": True,
-        "obligate": True
+        "type": "Home Loan", "amt": 0.0, "emi": 0.0, "roi": 9.0, 
+        "tenure_m": 120, "input_mode": "EMI",
+        "start": date(2021, 4, 1), "closure": date(2030, 3, 31), 
+        "add_back": True, "obligate": True
     })
 
 if st.button("➕ Add Existing Loan Details"):
@@ -67,31 +62,41 @@ for idx, loan in enumerate(st.session_state.loans):
         with l1:
             st.session_state.loans[idx]['type'] = st.selectbox(f"Type (L{idx})", ["Home Loan", "LAP", "PL/BL", "WCTL"], key=f"lt_{idx}")
             st.session_state.loans[idx]['amt'] = st.number_input(f"Original Loan Amount", value=loan['amt'], key=f"la_{idx}")
+            input_mode = st.radio("Input Mode", ["Know EMI", "Know Tenure"], key=f"mode_{idx}", horizontal=True)
+        
         with l2:
-            st.session_state.loans[idx]['emi'] = st.number_input(f"Monthly EMI", value=loan['emi'], key=f"le_{idx}")
             st.session_state.loans[idx]['roi'] = st.number_input(f"ROI (%)", value=loan['roi'], key=f"lr_{idx}")
+            if input_mode == "Know EMI":
+                st.session_state.loans[idx]['emi'] = st.number_input(f"Monthly EMI", value=loan['emi'], key=f"le_{idx}")
+            else:
+                tenure_months = st.number_input(f"Original Tenure (Months)", value=loan['tenure_m'], key=f"ltm_{idx}")
+                # Calculate EMI if Tenure is provided
+                if tenure_months > 0 and st.session_state.loans[idx]['roi'] > 0:
+                    r_monthly = (st.session_state.loans[idx]['roi'] / 100) / 12
+                    st.session_state.loans[idx]['emi'] = (st.session_state.loans[idx]['amt'] * r_monthly * (1 + r_monthly)**tenure_months) / ((1 + r_monthly)**tenure_months - 1)
+                    st.info(f"Calculated EMI: ₹{st.session_state.loans[idx]['emi']:,.0f}")
+                else:
+                    st.session_state.loans[idx]['emi'] = 0.0
+
         with l3:
             st.session_state.loans[idx]['start'] = st.date_input(f"Loan Start Date", value=loan['start'], key=f"ls_{idx}")
             st.session_state.loans[idx]['closure'] = st.date_input(f"Loan Closure Date", value=loan['closure'], key=f"lc_{idx}")
+        
         with l4:
             st.session_state.loans[idx]['add_back'] = st.checkbox("Add Interest to Profit?", value=loan['add_back'], key=f"lab_{idx}")
             st.session_state.loans[idx]['obligate'] = st.checkbox("Obligate EMI?", value=loan['obligate'], key=f"lob_{idx}")
 
-        # CALCULATE HISTORICAL INTEREST ADD-BACK
+        # CALCULATE HISTORICAL INTEREST
         if st.session_state.loans[idx]['amt'] > 0 and st.session_state.loans[idx]['emi'] > 0:
             st.write(f"**Historical Interest Schedule (Loan {idx+1})**")
             loan_sched = []
             temp_bal = st.session_state.loans[idx]['amt']
-            start_year = st.session_state.loans[idx]['start'].year
-            
-            for y in range(start_year, 2036):
+            for y in range(st.session_state.loans[idx]['start'].year, 2036):
                 yr_interest = temp_bal * (st.session_state.loans[idx]['roi'] / 100)
                 yr_principal = max(0, (st.session_state.loans[idx]['emi'] * 12) - yr_interest)
                 temp_bal = max(0, temp_bal - yr_principal)
-                
                 if y >= 2021:
                     loan_sched.append([f"FY {y}-{str(y+1)[2:]}", yr_interest, temp_bal])
-                    # Current FY Add-back (2025-26)
                     if y == 2025 and st.session_state.loans[idx]['add_back']:
                         total_interest_addback_fy += yr_interest
             
@@ -114,16 +119,14 @@ with col_p3:
     new_tenure = st.number_input("New Tenure (Years)", value=14)
 
 final_cash_profit = total_app_income + total_interest_addback_fy
-monthly_profit = final_cash_profit / 12
-max_emi_allowed = (monthly_profit * (foir / 100)) - total_existing_emi_impact
+max_emi_allowed = ((final_cash_profit / 12) * (foir / 100)) - total_existing_emi_impact
 
 if max_emi_allowed > 0:
     r = (new_roi / 12) / 100
     n = int(new_tenure * 12)
     max_loan = max_emi_allowed * ((1 - (1 + r)**-n) / r)
     st.success(f"### Maximum Eligible Loan Amount: ₹{max_loan:,.0f}")
-    st.info(f"FY 2025-26 Interest Add-back Included: ₹{total_interest_addback_fy:,.0f}")
 else:
-    st.error("No eligibility based on current profit and obligations.")
+    st.error("No eligibility based on FOIR and obligations.")
 
 st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376\nUdaipur, Rajasthan")
