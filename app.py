@@ -82,7 +82,7 @@ if 'loans' not in st.session_state:
     st.session_state.loans = []
 
 def add_loan():
-    # FIX: Explicitly initialize all keys including 'start' to prevent KeyError
+    # FIX: Explicitly initialize ALL keys used in the UI to prevent KeyError
     st.session_state.loans.append({
         "amt": 0.0, 
         "emi": 0.0, 
@@ -120,6 +120,7 @@ for idx, loan in enumerate(st.session_state.loans):
             for y in range(start_dt.year, 2036):
                 yr_int = temp_bal * (roi / 100)
                 temp_bal = max(0, temp_bal - ((emi * 12) - yr_int))
+                # Auto add-back for the current assessment FY
                 if y == base_year and add_int_check:
                     total_auto_interest_addback += yr_int
 
@@ -127,8 +128,8 @@ for idx, loan in enumerate(st.session_state.loans):
             total_detailed_emi += emi
 
 total_emi_load = manual_emi + total_detailed_emi
-# Convert yearly interest add-back to monthly and apply a standard 60% FOIR for the add-back capacity
-monthly_addback_cap = (total_auto_interest_addback / 12) * 0.60
+# Convert total yearly interest add-back to monthly capacity (applying 60% average FOIR)
+monthly_interest_addback_cap = (total_auto_interest_addback / 12) * 0.60
 
 # --- PART 4: FINAL ELIGIBILITY ---
 st.divider()
@@ -137,17 +138,17 @@ p1, p2, p3 = st.columns(3)
 with p1: n_roi = st.number_input("New Rate %", value=9.5, key="n_roi")
 with p2: n_ten = st.number_input("New Tenure (Yrs)", value=15, key="n_ten")
 
-# Combine base capacity + interest add-back capacity - current obligations
-max_new_emi = (total_emi_capacity + monthly_addback_cap) - total_emi_load
+# Calculation: Individual EMI Capacities + Monthly Interest Add-back Capacity - Monthly Obligations
+max_new_emi = (total_emi_capacity + monthly_interest_addback_cap) - total_emi_load
 
 
 
 if max_new_emi > 0:
-    r_rate = (n_roi/12)/100
-    n_months = n_ten * 12
-    max_loan = max_new_emi * ((1 - (1 + r_rate)**-n_months) / r_rate)
+    r_val = (n_roi/12)/100
+    n_val = n_ten * 12
+    max_loan = max_new_emi * ((1 - (1 + r_val)**-n_val) / r_val)
     st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
-    st.info(f"Total Yearly Int. Add-back from Running Loans: ₹{total_auto_interest_addback:,.0f}")
+    st.info(f"Total Combined EMI Capacity: ₹{(total_emi_capacity + monthly_interest_addback_cap):,.0f} | Running EMI: ₹{total_emi_load:,.0f}")
 else:
     st.error("No eligibility found based on FOIR and obligations.")
 
