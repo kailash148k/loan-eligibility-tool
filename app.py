@@ -71,7 +71,7 @@ for idx, loan in enumerate(st.session_state.loans):
         
         if st.session_state.loans[idx]['add_back'] and today < st.session_state.loans[idx]['closure']:
             # CA Logic: Approx Interest add-back
-            total_interest_to_add += (st.session_state.loans[idx]['emi'] * 12) * 0.6 # Assuming 60% of EMI is interest initially
+            total_interest_to_add += (st.session_state.loans[idx]['emi'] * 12) * 0.6
 
 # PART 3: RESULTS
 st.divider()
@@ -89,23 +89,28 @@ max_emi_allowed = (monthly_income * (foir / 100)) - total_monthly_emi_impact
 
 if max_emi_allowed > 0:
     r = (new_roi / 12) / 100
-    n = new_tenure * 12
+    n = int(new_tenure * 12)
     max_loan = max_emi_allowed * ((1 - (1 + r)**-n) / r)
     st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
     
-    # Yearly Principal/Interest Table
     st.write("### Principal/Interest Projection (FY 2021-2035)")
     res_data = []
-    bal = max_loan
+    current_bal = max_loan
     for y in range(2021, 2036):
-        y_int = bal * (new_roi / 100)
+        y_int = current_bal * (new_roi / 100)
         y_pri = (max_emi_allowed * 12) - y_int
-        bal = max(0, bal - y_pri)
-        res_data.append([f"FY {y}-{y+1-2000}", y_int, y_pri, bal])
+        current_bal = max(0, current_bal - y_pri)
+        res_data.append([f"FY {y}-{str(y+1)[2:]}", y_int, y_pri, current_bal])
     
     df = pd.DataFrame(res_data, columns=["Financial Year", "Interest", "Principal", "Balance"])
-    st.table(df.style.format("₹{:,.0f}"))
+    
+    # FIX: Applying format only to numeric columns to avoid ValueError
+    st.table(df.style.format({
+        "Interest": "₹{:,.0f}",
+        "Principal": "₹{:,.0f}",
+        "Balance": "₹{:,.0f}"
+    }))
 else:
-    st.error("No eligibility found.")
+    st.error("No eligibility found based on FOIR and obligations.")
 
 st.sidebar.markdown(f"**CA KAILASH MALI**\n7737306376")
