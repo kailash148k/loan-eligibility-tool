@@ -96,69 +96,86 @@ for i in range(int(num_apps)):
         cap = (avg_p / 12) * (foir / 100)
         total_emi_capacity += cap
 
-# --- PART 3: OBLIGATIONS & YEAR-WISE AMORTIZATION ---
+# --- PART 3: OBLIGATIONS & DYNAMIC EMI ---
 st.divider()
-st.header("2. Current Monthly Obligations (Year-wise Breakdown)")
-manual_emi = st.number_input("Manual Total EMI Entry (Non-detailed)", value=0.0, key="manual_emi")
+st.header("2. Current Monthly Obligations")
+manual_emi_global = st.number_input("Manual Total EMI Entry (Non-detailed)", value=0.0, key="manual_emi")
 
 if 'loans' not in st.session_state: st.session_state.loans = []
 if st.button("➕ Add Detailed Loan Row"):
-    st.session_state.loans.append({"amt": 0.0, "emi": 0.0, "roi": 9.0, "start": date(2021, 4, 1), "closure": date(2030, 3, 31), "add_int": True, "obligate": True})
+    st.session_state.loans.append({
+        "amt": 1000000.0, "roi": 9.0, "tenure_months": 120,
+        "start": date(2021, 4, 1), "closure": date(2030, 3, 31),
+        "add_int": True, "obligate": True, "is_manual": False, "manual_emi_val": 0.0
+    })
 
 total_detailed_emi = 0.0
 total_auto_int_addback = 0.0
-
 target_years = [2022, 2023, 2024, 2025, 2026]
 
 for idx, loan in enumerate(st.session_state.loans):
     with st.container(border=True):
         st.subheader(f"Loan Analysis: Row {idx+1}")
         l1, l2, l3, l4 = st.columns(4)
-        amt = l1.number_input(f"Original Loan Amt", key=f"la_{idx}", value=loan['amt'])
-        roi = l1.number_input(f"ROI %", key=f"lr_{idx}", value=loan['roi'])
-        emi = l2.number_input(f"Monthly EMI", key=f"le_{idx}", value=loan['emi'])
-        start_dt = l2.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
+        
+        # Inputs
+        amt = l1.number_input(f"Loan Amount", key=f"la_{idx}", value=loan['amt'])
+        roi = l1.number_input(f"ROI % (Annual)", key=f"lr_{idx}", value=loan['roi'])
+        
+        # EMI Toggle Logic
+        is_manual = l2.checkbox("Manual EMI Entry?", key=f"lm_check_{idx}", value=loan.get('is_manual', False))
+        
+        if is_manual:
+            active_emi = l2.number_input(f"Enter Exact EMI", key=f"le_man_{idx}", value=loan.get('manual_emi_val', 0.0))
+        else:
+            tenure = l2.number_input(f"Tenure (Months)", key=f"lt_{idx}", value=loan.get('tenure_months', 120))
+            # PMT Formula for Auto EMI
+            if amt > 0 and roi > 0 and tenure > 0:
+                r = (roi / 12) / 100
+                active_emi = (amt * r * (1 + r)**tenure) / ((1 + r)**tenure - 1)
+                l2.info(f"Calculated EMI: ₹{active_emi:,.2f}")
+            else:
+                active_emi = 0.0
+
+        start_dt = l3.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
         closure_dt = l3.date_input("Closure Date", key=f"lc_{idx}", value=loan['closure'])
-        add_int_check = l3.checkbox("Add Int to Income?", key=f"lab_{idx}", value=loan['add_int'])
+        add_int_check = l4.checkbox("Add Int to Income?", key=f"lab_{idx}", value=loan['add_int'])
         obligate_check = l4.checkbox("Obligate EMI?", key=f"lob_{idx}", value=loan['obligate'])
 
-        if amt > 0 and emi > 0:
+        # Amortization Table
+        if amt > 0 and active_emi > 0:
             schedule = []
             temp_bal = amt
-            # Basic amortization engine
             for y in range(start_dt.year, 2030):
                 yr_int = temp_bal * (roi / 100)
-                yr_prin = (emi * 12) - yr_int
+                yr_prin = (active_emi * 12) - yr_int
                 
-                # We only show specific requested years
                 if y in target_years:
                     schedule.append({
                         "Financial Year": f"FY {y}-{str(y+1)[2:]}",
                         "Interest Paid": round(yr_int, 2),
-                        "Principal Paid": round(yr_prin, 2),
+                        "Principal Paid": round(max(0, yr_prin), 2),
                         "Closing Balance": round(max(0, temp_bal - yr_prin), 2)
                     })
                 
-                # Auto add-back logic for assessment year
                 if y == base_year and add_int_check:
                     total_auto_int_addback += yr_int
                 
                 temp_bal = max(0, temp_bal - yr_prin)
                 if temp_bal == 0: break
 
-            # Display the year-wise breakdown in a table
             if schedule:
                 st.table(pd.DataFrame(schedule))
 
         if obligate_check and date.today() < closure_dt:
-            total_detailed_emi += emi
+            total_detailed_emi += active_emi
 
-total_emi_load = manual_emi + total_detailed_emi
+total_emi_load = manual_emi_global + total_detailed_emi
 addback_cap = (total_auto_int_addback / 12) * 0.60
 
-# --- PART 4: FINAL ELIGIBILITY & EXCEL ---
+# --- PART 4: RESULTS ---
 st.divider()
-st.header("3. Final Eligibility Results")
+st.header("3. Final Results")
 n_roi = st.number_input("New Rate %", value=9.5, key="n_roi")
 n_ten = st.number_input("New Tenure (Yrs)", value=15, key="n_ten")
 
@@ -169,15 +186,12 @@ if max_new_emi > 0:
     max_loan = max_new_emi * ((1 - (1 + r)**-n) / r)
     st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
     
-    # EXCEL EXPORT
-    report_data = {
-        "Summary": ["Customer", "EMI Capacity", "Obligations", "Net Available", "Eligible Loan"],
-        "Value": [client_name, round(total_emi_capacity + addback_cap, 0), total_emi_load, round(max_new_emi, 0), round(max_loan, 0)]
-    }
+    # Simple Excel Summary
+    report_data = {"Metric": ["Customer", "Total EMI Cap", "EMI Load", "Net Available", "Loan Eligibility"],
+                   "Value": [client_name, f"{total_emi_capacity + addback_cap:,.0f}", f"{total_emi_load:,.0f}", f"{max_new_emi:,.0f}", f"{max_loan:,.0f}"]}
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         pd.DataFrame(report_data).to_excel(writer, index=False)
-    
-    st.download_button("📥 Download Excel Report", data=buffer.getvalue(), file_name=f"Loan_{client_name}.xlsx")
+    st.download_button("📥 Export to Excel", data=buffer.getvalue(), file_name=f"Loan_{client_name}.xlsx")
 else:
-    st.error("Negative eligibility. Check obligations.")
+    st.error("No eligibility based on FOIR/Obligations.")
