@@ -9,51 +9,51 @@ import io
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="CA Loan Master Pro", layout="wide", page_icon="⚖️")
 
-# --- CUSTOM CSS FOR 16px FONT AND COMPACT SPACING ---
+# --- CUSTOM CSS FOR ENHANCED FONT SIZES (18px+) ---
 st.markdown("""
     <style>
-    /* Global font size set to 16px */
+    /* Global font size increased to 18px */
     html, body, [class*="css"] { 
-        font-size: 16px !important; 
+        font-size: 18px !important; 
     }
     
-    /* Main Headings (1. Assessment Settings, etc.) */
+    /* Section Headings (1. Assessment Settings, etc.) */
     h2 { 
-        font-size: 18px !important; 
-        margin-top: 10px !important; 
-        margin-bottom: 5px !important; 
+        font-size: 22px !important; 
+        margin-top: 15px !important; 
+        margin-bottom: 8px !important; 
         color: #1E3A8A; 
         font-weight: bold !important; 
-        border-bottom: 1px solid #eee;
+        border-bottom: 2px solid #eee;
     }
     
-    /* Row Headings */
+    /* Row Headings like 'Loan Analysis' */
     h3 { 
-        font-size: 16px !important; 
-        margin-top: 5px !important; 
-        margin-bottom: 5px !important; 
+        font-size: 19px !important; 
+        margin-top: 8px !important; 
+        margin-bottom: 8px !important; 
         font-weight: bold !important; 
     }
 
-    /* Input labels and button text */
-    label, .stButton>button { 
-        font-size: 16px !important; 
+    /* Target Tables/Dataframes (Your 2nd Image) */
+    .stDataFrame div, .stTable td, .stTable th { 
+        font-size: 18px !important; 
     }
 
-    /* Reduce vertical gaps slightly to compensate for larger font */
+    /* Input labels, text inputs, and select boxes */
+    label, .stTextInput input, .stSelectbox div, .stNumberInput input { 
+        font-size: 18px !important; 
+    }
+
+    /* Sidebar text */
+    [data-testid="stSidebar"] { 
+        font-size: 18px !important; 
+    }
+
+    /* Adjust vertical spacing to accommodate larger text */
     [data-testid="stVerticalBlock"] > div { 
-        padding-top: 0.1rem !important; 
-        padding-bottom: 0.1rem !important; 
-    }
-    
-    /* Dataframe font size */
-    .stDataFrame, .stTable { 
-        font-size: 14px !important; 
-    }
-
-    /* App Padding */
-    .block-container { 
-        padding-top: 2rem !important; 
+        padding-top: 0.2rem !important; 
+        padding-bottom: 0.2rem !important; 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -78,7 +78,7 @@ st.markdown("**CA KAILASH MALI | 7737306376 | Udaipur**")
 
 with st.sidebar:
     st.header("Profile Management")
-    if st.button("🆕 Start New Assessment"):
+    if st.button("🆕 Start New Assessment (Reset)"):
         db_ref = st.session_state.db
         st.session_state.clear()
         st.session_state.db = db_ref
@@ -166,7 +166,7 @@ for idx, loan in enumerate(st.session_state.loans):
 st.header("3. Applicant Details & Financials")
 total_cap = 0.0
 for i in range(int(num_apps)):
-    with st.expander(f"Applicant {i+1} - Financials", expanded=True):
+    with st.expander(f"Applicant {i+1}", expanded=True):
         c_n, c_f, c_a = st.columns([2, 1, 1])
         name = c_n.text_input("Name", key=f"name_{i}")
         foir = c_f.number_input("FOIR %", 10, 100, 60, key=f"foir_{i}")
