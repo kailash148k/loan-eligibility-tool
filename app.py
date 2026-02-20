@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, timedelta
+from dateutil.relativedelta import relativedelta
 import json
 import os
 import io
@@ -16,8 +17,7 @@ def load_db():
         try:
             with open(DB_FILE, "r") as f:
                 return json.load(f)
-        except:
-            return {}
+        except: return {}
     return {}
 
 def save_db(data):
@@ -67,131 +67,140 @@ if st.sidebar.button("🔄 Load Profile"):
             else: st.session_state[k] = v
         st.rerun()
 
-# --- PART 2: APPLICANT FINANCIALS ---
-st.header("1. Applicant Details & 3-Year Financials")
+# --- PART 2: GLOBAL SETTINGS & LOAN CALCULATIONS (PRE-CALC FOR ADD-BACK) ---
+st.header("1. Assessment Settings")
 curr_fy = st.selectbox("Current Assessment FY", ["FY 2024-25", "FY 2025-26"], index=0, key="global_fy")
 base_year = int(curr_fy.split(" ")[1].split("-")[0])
+target_years = [2022, 2023, 2024, 2025, 2026]
 
-num_apps = st.number_input("How many applicants (1-10)?", 1, 10, 1, key="num_apps")
-total_emi_capacity = 0.0
+# Prepare variables for Loan Calculations
+if 'loans' not in st.session_state: st.session_state.loans = []
+total_detailed_emi = 0.0
+# We use a dictionary to store interest add-back per FY to show in Financials later
+fy_interest_totals = {2022: 0.0, 2023: 0.0, 2024: 0.0, 2025: 0.0, 2026: 0.0}
 
-for i in range(int(num_apps)):
-    with st.expander(f"Applicant {i+1} Financials", expanded=False):
-        c_n, c_f = st.columns([2, 1])
-        name = c_n.text_input(f"Name", key=f"name_{i}")
-        foir = c_f.number_input(f"FOIR %", 10, 100, 60, key=f"foir_{i}")
-        avg_m = st.radio(f"Avg Method", ["Latest 2 Years", "Latest 3 Years"], key=f"avg_m_{i}", horizontal=True)
-
-        c1, c2, c3 = st.columns(3)
-        annual_flows = []
-        for idx in range(3):
-            with [c1, c2, c3][idx]:
-                n = st.number_input(f"NPBT", key=f"npbt_{i}_{idx}", value=0.0)
-                d = st.number_input(f"Dep", key=f"dep_{i}_{idx}", value=0.0)
-                f_d = min(d, max(0.0, n)) if st.checkbox("Restrict Dep", key=f"re_{i}_{idx}", value=True) else d
-                flow = n + f_d + st.number_input(f"Other Add-back", key=f"int_{i}_{idx}", value=0.0)
-                annual_flows.append(flow)
-
-        avg_p = (sum(annual_flows[:2])/2) if avg_m == "Latest 2 Years" else (sum(annual_flows)/3)
-        cap = (avg_p / 12) * (foir / 100)
-        total_emi_capacity += cap
-
-# --- PART 3: OBLIGATIONS & DYNAMIC EMI ---
+# --- PART 3: LOAN OBLIGATIONS (CALCULATED FIRST TO SYNC DATA) ---
 st.divider()
 st.header("2. Current Monthly Obligations")
-manual_emi_global = st.number_input("Manual Total EMI Entry (Non-detailed)", value=0.0, key="manual_emi")
-
-if 'loans' not in st.session_state: st.session_state.loans = []
 if st.button("➕ Add Detailed Loan Row"):
     st.session_state.loans.append({
         "amt": 1000000.0, "roi": 9.0, "tenure_months": 120,
-        "start": date(2021, 4, 1), "closure": date(2030, 3, 31),
+        "start": date(2021, 4, 1), "pre_closure": None,
         "add_int": True, "obligate": True, "is_manual": False, "manual_emi_val": 0.0
     })
-
-total_detailed_emi = 0.0
-total_auto_int_addback = 0.0
-target_years = [2022, 2023, 2024, 2025, 2026]
 
 for idx, loan in enumerate(st.session_state.loans):
     with st.container(border=True):
         st.subheader(f"Loan Analysis: Row {idx+1}")
         l1, l2, l3, l4 = st.columns(4)
         
-        # Inputs
         amt = l1.number_input(f"Loan Amount", key=f"la_{idx}", value=loan['amt'])
-        roi = l1.number_input(f"ROI % (Annual)", key=f"lr_{idx}", value=loan['roi'])
+        roi = l1.number_input(f"ROI %", key=f"lr_{idx}", value=loan['roi'])
         
-        # EMI Toggle Logic
         is_manual = l2.checkbox("Manual EMI Entry?", key=f"lm_check_{idx}", value=loan.get('is_manual', False))
+        tenure_mo = l2.number_input(f"Tenure (Months)", key=f"lt_{idx}", value=loan.get('tenure_months', 120))
         
+        start_dt = l3.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
+        # Auto-calculate maturity
+        maturity_dt = start_dt + relativedelta(months=int(tenure_mo))
+        l3.info(f"Maturity Date: {maturity_dt.strftime('%d-%m-%Y')}")
+        
+        pre_closure = l3.date_input("Pre-closure Date (Optional)", key=f"lpc_{idx}", value=None if loan.get('pre_closure') == "None" else loan.get('pre_closure'))
+        final_end_date = pre_closure if pre_closure else maturity_dt
+
         if is_manual:
             active_emi = l2.number_input(f"Enter Exact EMI", key=f"le_man_{idx}", value=loan.get('manual_emi_val', 0.0))
         else:
-            tenure = l2.number_input(f"Tenure (Months)", key=f"lt_{idx}", value=loan.get('tenure_months', 120))
-            # PMT Formula for Auto EMI
-            if amt > 0 and roi > 0 and tenure > 0:
+            if amt > 0 and roi > 0 and tenure_mo > 0:
                 r = (roi / 12) / 100
-                active_emi = (amt * r * (1 + r)**tenure) / ((1 + r)**tenure - 1)
-                l2.info(f"Calculated EMI: ₹{active_emi:,.2f}")
-            else:
-                active_emi = 0.0
+                active_emi = (amt * r * (1 + r)**tenure_mo) / ((1 + r)**tenure_mo - 1)
+                l2.info(f"Calc EMI: ₹{active_emi:,.0f}")
+            else: active_emi = 0.0
 
-        start_dt = l3.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
-        closure_dt = l3.date_input("Closure Date", key=f"lc_{idx}", value=loan['closure'])
         add_int_check = l4.checkbox("Add Int to Income?", key=f"lab_{idx}", value=loan['add_int'])
         obligate_check = l4.checkbox("Obligate EMI?", key=f"lob_{idx}", value=loan['obligate'])
 
-        # Amortization Table
         if amt > 0 and active_emi > 0:
-            schedule = []
             temp_bal = amt
-            for y in range(start_dt.year, 2030):
+            schedule = []
+            for y in range(start_dt.year, final_end_date.year + 1):
                 yr_int = temp_bal * (roi / 100)
                 yr_prin = (active_emi * 12) - yr_int
                 
                 if y in target_years:
                     schedule.append({
                         "Financial Year": f"FY {y}-{str(y+1)[2:]}",
-                        "Interest Paid": round(yr_int, 2),
-                        "Principal Paid": round(max(0, yr_prin), 2),
-                        "Closing Balance": round(max(0, temp_bal - yr_prin), 2)
+                        "Interest": round(yr_int, 2),
+                        "Principal": round(max(0, yr_prin), 2)
                     })
-                
-                if y == base_year and add_int_check:
-                    total_auto_int_addback += yr_int
+                    if add_int_check:
+                        fy_interest_totals[y] += yr_int
                 
                 temp_bal = max(0, temp_bal - yr_prin)
                 if temp_bal == 0: break
+            
+            if schedule: st.table(pd.DataFrame(schedule))
 
-            if schedule:
-                st.table(pd.DataFrame(schedule))
-
-        if obligate_check and date.today() < closure_dt:
+        if obligate_check and date.today() < final_end_date:
             total_detailed_emi += active_emi
 
-total_emi_load = manual_emi_global + total_detailed_emi
-addback_cap = (total_auto_int_addback / 12) * 0.60
-
-# --- PART 4: RESULTS ---
+# --- PART 4: APPLICANT DETAILS (NOW SHOWING SYNCED INTEREST) ---
 st.divider()
-st.header("3. Final Results")
-n_roi = st.number_input("New Rate %", value=9.5, key="n_roi")
-n_ten = st.number_input("New Tenure (Yrs)", value=15, key="n_ten")
+st.header("3. Applicant Details & Financials")
+num_apps = st.number_input("How many applicants (1-10)?", 1, 10, 1, key="num_apps")
+total_emi_capacity = 0.0
 
-max_new_emi = (total_emi_capacity + addback_cap) - total_emi_load
+for i in range(int(num_apps)):
+    with st.expander(f"Applicant {i+1} Details", expanded=True):
+        c_n, c_f = st.columns([2, 1])
+        name = c_n.text_input(f"Name", key=f"name_{i}")
+        foir = c_f.number_input(f"FOIR %", 10, 100, 60, key=f"foir_{i}")
+        avg_m = st.radio(f"Avg Method", ["Latest 2 Years", "Latest 3 Years"], key=f"avg_m_{i}", horizontal=True)
+
+        years_display = [f"FY {base_year}-{str(base_year+1)[2:]}", f"FY {base_year-1}-{str(base_year)[2:]}", f"FY {base_year-2}-{str(base_year-1)[2:]}"]
+        c1, c2, c3 = st.columns(3)
+        annual_flows = []
+        
+        for idx, yr_label in enumerate(years_display):
+            y_int = int(yr_label.split(" ")[1].split("-")[0])
+            with [c1, c2, c3][idx]:
+                st.markdown(f"**{yr_label}**")
+                n = st.number_input(f"NPBT", key=f"npbt_{i}_{idx}", value=0.0)
+                d = st.number_input(f"Depreciation", key=f"dep_{i}_{idx}", value=0.0)
+                
+                # SHOW AUTO-CALCULATED INTEREST HERE
+                auto_int = fy_interest_totals.get(y_int, 0.0)
+                st.write(f"Synced Loan Int: ₹{auto_int:,.2f}")
+                
+                man_add = st.number_input(f"Manual Add-back", key=f"int_{i}_{idx}", value=0.0)
+                
+                f_d = min(d, max(0.0, n)) if st.checkbox("Restrict Dep", key=f"re_{i}_{idx}", value=True) else d
+                flow = n + f_d + auto_int + man_add
+                annual_flows.append(flow)
+                st.caption(f"Total Cash Flow: ₹{flow:,.0f}")
+
+        avg_p = (sum(annual_flows[:2])/2) if avg_m == "Latest 2 Years" else (sum(annual_flows)/3)
+        cap = (avg_p / 12) * (foir / 100)
+        total_emi_capacity += cap
+        st.success(f"Monthly EMI Capacity for {name if name else 'Applicant'}: ₹{cap:,.0f}")
+
+# --- PART 5: RESULTS ---
+st.divider()
+st.header("4. Final Results")
+manual_emi_global = st.number_input("Other Manual EMIs", value=0.0)
+total_load = manual_emi_global + total_detailed_emi
+
+p1, p2 = st.columns(2)
+n_roi = p1.number_input("Proposed Rate %", value=9.5)
+n_ten = p2.number_input("Proposed Tenure (Yrs)", value=15)
+
+max_new_emi = total_emi_capacity - total_load
 
 if max_new_emi > 0:
     r, n = (n_roi/12)/100, n_ten * 12
     max_loan = max_new_emi * ((1 - (1 + r)**-n) / r)
+    st.balloons()
     st.success(f"### Maximum Eligible Loan: ₹{max_loan:,.0f}")
-    
-    # Simple Excel Summary
-    report_data = {"Metric": ["Customer", "Total EMI Cap", "EMI Load", "Net Available", "Loan Eligibility"],
-                   "Value": [client_name, f"{total_emi_capacity + addback_cap:,.0f}", f"{total_emi_load:,.0f}", f"{max_new_emi:,.0f}", f"{max_loan:,.0f}"]}
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        pd.DataFrame(report_data).to_excel(writer, index=False)
-    st.download_button("📥 Export to Excel", data=buffer.getvalue(), file_name=f"Loan_{client_name}.xlsx")
+    st.info(f"Total Capacity: ₹{total_emi_capacity:,.0f} | Existing Load: ₹{total_load:,.0f}")
 else:
-    st.error("No eligibility based on FOIR/Obligations.")
+    st.error("No eligibility - Obligations exceed FOIR capacity.")
