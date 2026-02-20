@@ -9,43 +9,52 @@ import io
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="CA Loan Master Pro", layout="wide", page_icon="⚖️")
 
-# --- COMPACT CSS FOR HEADINGS AND SPACING ---
+# --- CUSTOM CSS FOR 16px FONT AND COMPACT SPACING ---
 st.markdown("""
     <style>
-    /* Reduce top padding of the entire app */
-    .block-container { padding-top: 1rem !important; padding-bottom: 0rem !important; }
-    
-    /* Global font size */
-    html, body, [class*="css"] { font-size: 13px !important; }
-    
-    /* Target "1. Assessment Settings" etc. */
-    h2 { 
+    /* Global font size set to 16px */
+    html, body, [class*="css"] { 
         font-size: 16px !important; 
-        margin-top: 5px !important; 
-        margin-bottom: 2px !important; 
-        padding-top: 0px !important;
-        padding-bottom: 2px !important;
+    }
+    
+    /* Main Headings (1. Assessment Settings, etc.) */
+    h2 { 
+        font-size: 18px !important; 
+        margin-top: 10px !important; 
+        margin-bottom: 5px !important; 
         color: #1E3A8A; 
         font-weight: bold !important; 
         border-bottom: 1px solid #eee;
     }
     
-    /* Subheaders like "Loan Row" */
+    /* Row Headings */
     h3 { 
-        font-size: 13px !important; 
-        margin-top: 2px !important; 
-        margin-bottom: 2px !important; 
+        font-size: 16px !important; 
+        margin-top: 5px !important; 
+        margin-bottom: 5px !important; 
         font-weight: bold !important; 
     }
 
-    /* Shrink the gap between all Streamlit elements */
-    [data-testid="stVerticalBlock"] > div { padding-top: 0.05rem !important; padding-bottom: 0.05rem !important; }
+    /* Input labels and button text */
+    label, .stButton>button { 
+        font-size: 16px !important; 
+    }
+
+    /* Reduce vertical gaps slightly to compensate for larger font */
+    [data-testid="stVerticalBlock"] > div { 
+        padding-top: 0.1rem !important; 
+        padding-bottom: 0.1rem !important; 
+    }
     
-    /* Compact Table styling */
-    .stDataFrame, .stTable { font-size: 12px !important; }
-    
-    /* Minimize Expander padding */
-    .streamlit-expanderHeader { padding: 2px 10px !important; }
+    /* Dataframe font size */
+    .stDataFrame, .stTable { 
+        font-size: 14px !important; 
+    }
+
+    /* App Padding */
+    .block-container { 
+        padding-top: 2rem !important; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -65,7 +74,7 @@ if 'db' not in st.session_state: st.session_state.db = load_db()
 
 # --- PART 1: BRANDING & SIDEBAR ---
 st.title("⚖️ Loan Eligibility Assessment Tool")
-st.caption("CA KAILASH MALI | Udaipur")
+st.markdown("**CA KAILASH MALI | 7737306376 | Udaipur**")
 
 with st.sidebar:
     st.header("Profile Management")
@@ -101,7 +110,7 @@ with st.sidebar:
 st.header("1. Assessment Settings")
 col_fy, col_apps = st.columns(2)
 curr_fy = col_fy.selectbox("Current Assessment FY", ["FY 2024-25", "FY 2025-26"], index=0, key="global_fy")
-num_apps = col_apps.number_input("How many applicants (1-10)?", 1, 10, 1, key="num_apps")
+num_apps = col_apps.number_input("How many applicants?", 1, 10, 1, key="num_apps")
 
 base_year = int(curr_fy.split(" ")[1].split("-")[0])
 target_years = [2022, 2023, 2024, 2025, 2026]
@@ -197,7 +206,6 @@ if net_emi_final > 0:
     eligible_loan = net_emi_final * ((1 - (1 + r_v)**-n_v) / r_v)
     st.success(f"### Maximum Eligible Loan: ₹{eligible_loan:,.0f}")
     
-    # Minimal Excel Export
     res_summary = pd.DataFrame({"Metric": ["Net EMI Available", "Eligible Loan"], "Value": [f"{net_emi_final:,.0f}", f"{eligible_loan:,.0f}"]})
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='xlsxwriter') as writer: res_summary.to_excel(writer, index=False)
