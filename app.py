@@ -10,30 +10,33 @@ import io
 st.set_page_config(page_title="CA Loan Master Pro", layout="wide", page_icon="⚖️")
 
 # --- PART 1: DYNAMIC ZOOM CONTROLS ---
+if 'app_zoom' not in st.session_state: st.session_state.app_zoom = 18
+if 'sidebar_zoom' not in st.session_state: st.session_state.sidebar_zoom = 18
+if 'main_zoom' not in st.session_state: st.session_state.main_zoom = 18
+
 with st.sidebar:
     st.header("🔍 Zoom & View Settings")
     
-    # Reset Button for Zoom
     if st.button("🔄 Reset Zoom to Default"):
         st.session_state.app_zoom = 18
         st.session_state.sidebar_zoom = 18
         st.session_state.main_zoom = 18
+        st.rerun()
 
-    # Sliders using session state to allow resetting
-    app_zoom = st.slider("Global Font Size", 10, 30, st.session_state.get('app_zoom', 18), key="app_zoom")
-    sidebar_zoom = st.slider("Sidebar Font Size", 10, 30, st.session_state.get('sidebar_zoom', 18), key="sidebar_zoom")
-    main_zoom = st.slider("Workspace Font Size", 10, 30, st.session_state.get('main_zoom', 18), key="main_zoom")
+    app_zoom = st.slider("Global Font Size", 10, 30, st.session_state.app_zoom, key="zoom_g")
+    sidebar_zoom = st.slider("Sidebar Font Size", 10, 30, st.session_state.sidebar_zoom, key="zoom_s")
+    main_zoom = st.slider("Workspace Font Size", 10, 30, st.session_state.main_zoom, key="zoom_m")
 
 # --- INJECT DYNAMIC CSS ---
 st.markdown(f"""
     <style>
     html, body, [class*="css"] {{ font-size: {app_zoom}px !important; }}
     [data-testid="stSidebar"] {{ font-size: {sidebar_zoom}px !important; }}
-    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] button {{ font-size: {sidebar_zoom}px !important; }}
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] button {{ font-size: {sidebar_zoom}px !important; }}
     [data-testid="stMain"] {{ font-size: {main_zoom}px !important; }}
-    [data-testid="stMain"] h2 {{ font-size: {main_zoom + 4}px !important; }}
-    [data-testid="stMain"] h3 {{ font-size: {main_zoom + 2}px !important; }}
-    [data-testid="stMain"] label, [data-testid="stMain"] .stMarkdown p, [data-testid="stMain"] .stTable td, [data-testid="stMain"] .stDataFrame div {{ font-size: {main_zoom}px !important; }}
+    [data-testid="stMain"] h2 {{ font-size: {main_zoom + 4}px !important; color: #1E3A8A; font-weight: bold; }}
+    [data-testid="stMain"] h3 {{ font-size: {main_zoom + 2}px !important; font-weight: bold; }}
+    [data-testid="stMain"] label, [data-testid="stMain"] .stTable td, [data-testid="stMain"] .stDataFrame div {{ font-size: {main_zoom}px !important; }}
     [data-testid="stVerticalBlock"] > div {{ padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; }}
     </style>
     """, unsafe_allow_html=True)
@@ -87,12 +90,11 @@ with st.sidebar:
                 else: st.session_state[k] = v
             st.rerun()
 
-# --- PART 2: ASSESSMENT SETTINGS ---
+# --- PART 1: ASSESSMENT SETTINGS ---
 st.header("1. Assessment Settings")
 col_fy, col_apps = st.columns(2)
 curr_fy = col_fy.selectbox("Current Assessment FY", ["FY 2024-25", "FY 2025-26"], index=0, key="global_fy")
-# THIS IS THE PRIMARY KEY FOR APPLICANTS
-num_apps = col_apps.number_input("How many applicants?", 1, 10, 1, key="num_apps_global")
+num_apps = col_apps.number_input("How many applicants?", 1, 10, 1, key="num_apps_main")
 
 base_year = int(curr_fy.split(" ")[1].split("-")[0])
 target_years = [2022, 2023, 2024, 2025, 2026]
@@ -101,7 +103,7 @@ if 'loans' not in st.session_state: st.session_state.loans = []
 total_detailed_emi = 0.0
 fy_interest_totals = {2022: 0.0, 2023: 0.0, 2024: 0.0, 2025: 0.0, 2026: 0.0}
 
-# --- PART 3: LOAN OBLIGATIONS ---
+# --- PART 2: LOAN OBLIGATIONS ---
 st.header("2. Current Monthly Obligations")
 if st.button("➕ Add Detailed Loan Row"):
     st.session_state.loans.append({
@@ -148,13 +150,11 @@ for idx, loan in enumerate(st.session_state.loans):
             if sch: st.dataframe(pd.DataFrame(sch), hide_index=True, use_container_width=True)
         if obli and date.today() < mat_dt: total_detailed_emi += active_emi
 
-# --- PART 4: APPLICANT DETAILS & FINANCIALS ---
+# --- PART 3: APPLICANT DETAILS ---
 st.header("3. Applicant Details & Financials")
-# REMOVED: The duplicate number_input here. It now uses 'num_apps' from Section 1.
 total_cap = 0.0
-
 for i in range(int(num_apps)):
-    with st.expander(f"Applicant {i+1} - {st.session_state.get(f'name_{i}', 'Details')}", expanded=True):
+    with st.expander(f"Applicant {i+1}", expanded=True):
         c_n, c_f, c_a = st.columns([2, 1, 1])
         name = c_n.text_input("Name", key=f"name_{i}")
         foir = c_f.number_input("FOIR %", 10, 100, 60, key=f"foir_{i}")
@@ -167,12 +167,12 @@ for i in range(int(num_apps)):
             with [c1, c2, c3][idx]:
                 st.markdown(f"**FY {yr_val}-{str(yr_val+1)[2:]}**")
                 n_p = st.number_input("NPBT", key=f"npbt_{i}_{idx}", value=0.0)
-                dep = st.number_input("Depreciation", key=f"dep_{i}_{idx}", value=0.0)
+                dep = st.number_input("Dep", key=f"dep_{i}_{idx}", value=0.0)
                 s_i = fy_interest_totals.get(yr_val, 0.0)
-                st.caption(f"Interest Sync: ₹{s_i:,.0f}")
+                st.caption(f"Int Sync: ₹{s_i:,.0f}")
                 restr = st.checkbox("Restrict Dep", key=f"re_{i}_{idx}", value=True)
                 f_d = min(dep, max(0.0, n_p)) if restr else dep
-                fl = n_p + f_d + s_i + st.number_input("Manual Add-back", key=f"int_{i}_{idx}", value=0.0)
+                fl = n_p + f_d + s_i + st.number_input("Manual Add", key=f"int_{i}_{idx}", value=0.0)
                 flows.append(fl)
         
         avg = (sum(flows[:2])/2) if meth == "2Y" else (sum(flows)/3)
@@ -180,10 +180,27 @@ for i in range(int(num_apps)):
         total_cap += cap
         st.write(f"Monthly EMI Capacity: **₹{cap:,.0f}**")
 
-# --- PART 5: FINAL RESULTS ---
+# --- PART 4: ELIGIBILITY & DYNAMIC OTHER EMIS ---
 st.header("4. Eligibility Results")
-man_emi_ext = st.number_input("Other Manual EMIs", value=0.0)
-net_emi_final = total_cap - (man_emi_ext + total_detailed_emi)
+
+
+# Dynamic Box for Other EMIs
+col_count, col_total = st.columns([1, 2])
+with col_count:
+    num_other_emis = st.number_input("How many other EMIs?", 0, 20, 0, key="num_other_count")
+
+other_emi_total = 0.0
+if num_other_emis > 0:
+    st.markdown("##### Enter Individual Other EMI Amounts")
+    # Arrange small boxes in rows of 4
+    for i in range(0, num_other_emis, 4):
+        cols = st.columns(4)
+        for j in range(4):
+            if i + j < num_other_emis:
+                val = cols[j].number_input(f"EMI {i+j+1}", key=f"other_emi_val_{i+j}", value=0.0)
+                other_emi_total += val
+
+net_emi_final = total_cap - (other_emi_total + total_detailed_emi)
 
 r_p, t_p = st.columns(2)
 new_roi = r_p.number_input("Proposed Rate %", value=9.5)
@@ -196,6 +213,6 @@ if net_emi_final > 0:
     
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-        pd.DataFrame({"Metric": ["Net EMI Available", "Eligible Loan"], "Value": [f"{net_emi_final:,.0f}", f"{eligible_loan:,.0f}"]}).to_excel(writer, index=False)
+        pd.DataFrame({"Metric": ["Net EMI", "Eligible Loan"], "Value": [f"{net_emi_final:,.0f}", f"{eligible_loan:,.0f}"]}).to_excel(writer, index=False)
     st.download_button("📥 Export to Excel", buf.getvalue(), f"Loan_{c_name}.xlsx")
 else: st.error("Obligations exceed FOIR capacity.")
