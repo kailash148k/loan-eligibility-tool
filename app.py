@@ -9,88 +9,85 @@ import io
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="CA Loan Master Pro", layout="wide", page_icon="⚖️")
 
-# --- CUSTOM CSS FOR FONT SIZES ---
+# --- COMPACT CSS FOR MINIMAL SPACE ---
 st.markdown("""
     <style>
-    /* Main body font size */
-    html, body, [class*="css"] {
-        font-size: 14px !important;
-    }
-    /* Header sizes */
-    h1 { font-size: 20px !important; font-weight: bold; color: #1E3A8A; }
-    h2 { font-size: 16px !important; font-weight: bold; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-    h3 { font-size: 14px !important; font-weight: bold; }
+    /* Reduce top padding of the app */
+    .block-container { padding-top: 1rem; padding-bottom: 0rem; }
     
-    /* Tables and sidebar */
-    .stTable { font-size: 12px !important; }
-    .stMarkdown p { font-size: 14px !important; }
+    /* Main font and small text */
+    html, body, [class*="css"] { font-size: 13px !important; }
     
-    /* Input label sizes */
-    label { font-size: 13px !important; font-weight: 500 !important; }
+    /* Strict Header Sizing */
+    h1 { font-size: 18px !important; margin-bottom: 5px !important; padding-top: 0px !important; }
+    h2 { font-size: 15px !important; margin-top: 10px !important; margin-bottom: 5px !important; color: #1E3A8A; font-weight: bold !important; }
+    h3 { font-size: 13px !important; margin-top: 5px !important; margin-bottom: 2px !important; font-weight: bold !important; }
+    
+    /* Shrink spacing between widgets */
+    div[data-testid="stVerticalBlock"] > div { padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; }
+    
+    /* Compact Table/Dataframe */
+    .stDataFrame, .stTable { font-size: 12px !important; }
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] { width: 250px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- PERMANENT STORAGE LOGIC ---
+# --- PERMANENT STORAGE ---
 DB_FILE = "client_database.json"
-
 def load_db():
     if os.path.exists(DB_FILE):
         try:
-            with open(DB_FILE, "r") as f:
-                return json.load(f)
+            with open(DB_FILE, "r") as f: return json.load(f)
         except: return {}
     return {}
 
 def save_db(data):
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=4, default=str)
+    with open(DB_FILE, "w") as f: json.dump(data, f, indent=4, default=str)
 
-if 'db' not in st.session_state:
-    st.session_state.db = load_db()
+if 'db' not in st.session_state: st.session_state.db = load_db()
 
 # --- PART 1: BRANDING & SIDEBAR ---
-st.title("⚖️ Loan Eligibility Assessment Tool")
-st.markdown("**CA KAILASH MALI | 7737306376 | Udaipur**")
+st.title("⚖️ Loan Eligibility Tool")
+st.caption("CA KAILASH MALI | Udaipur")
 
-st.sidebar.header("📁 Profile Management")
-
-if st.sidebar.button("🆕 Start New Assessment"):
-    current_db = st.session_state.db
-    st.session_state.clear()
-    st.session_state.db = current_db
-    st.rerun()
-
-st.sidebar.divider()
-client_name = st.sidebar.text_input("Customer Name", placeholder="e.g. Rajesh Kumar")
-
-if st.sidebar.button("💾 Save Profile"):
-    if client_name:
-        current_data = {k: v for k, v in st.session_state.items() if k != 'db'}
-        st.session_state.db[client_name] = current_data
-        save_db(st.session_state.db)
-        st.sidebar.success(f"Profile saved!")
-    else:
-        st.sidebar.error("Enter a name.")
-
-saved_profiles = list(st.session_state.db.keys())
-selected_profile = st.sidebar.selectbox("📂 Load Profile", ["-- Select --"] + saved_profiles)
-
-if st.sidebar.button("🔄 Load"):
-    if selected_profile != "-- Select --":
-        profile_data = st.session_state.db[selected_profile]
-        current_db = st.session_state.db
+with st.sidebar:
+    st.header("Profile Manager")
+    if st.button("🆕 New Assessment"):
+        db = st.session_state.db
         st.session_state.clear()
-        st.session_state.db = current_db
-        for k, v in profile_data.items():
-            if isinstance(v, str) and len(v) == 10 and v.count("-") == 2:
-                try: st.session_state[k] = date.fromisoformat(v)
-                except: st.session_state[k] = v
-            else: st.session_state[k] = v
+        st.session_state.db = db
         st.rerun()
+    st.divider()
+    c_name = st.text_input("Client Name", key="main_client_name")
+    if st.button("💾 Save"):
+        if c_name:
+            st.session_state.db[c_name] = {k: v for k, v in st.session_state.items() if k != 'db'}
+            save_db(st.session_state.db)
+            st.success("Saved")
+    
+    profiles = ["-- Select --"] + list(st.session_state.db.keys())
+    sel = st.selectbox("Load Profile", profiles)
+    if st.button("🔄 Load"):
+        if sel != "-- Select --":
+            data = st.session_state.db[sel]
+            db = st.session_state.db
+            st.session_state.clear()
+            st.session_state.db = db
+            for k, v in data.items():
+                if isinstance(v, str) and len(v) == 10 and "-" in v:
+                    try: st.session_state[k] = date.fromisoformat(v)
+                    except: st.session_state[k] = v
+                else: st.session_state[k] = v
+            st.rerun()
 
-# --- PART 2: SETTINGS & LOAN CALCS (SYNCED) ---
+# --- PART 2: ASSESSMENT SETTINGS ---
 st.header("1. Assessment Settings")
-curr_fy = st.selectbox("Current Assessment FY", ["FY 2024-25", "FY 2025-26"], index=0, key="global_fy")
+col_fy, col_apps = st.columns(2)
+curr_fy = col_fy.selectbox("FY", ["FY 2024-25", "FY 2025-26"], index=0, key="global_fy")
+num_apps = col_apps.number_input("No. of Applicants", 1, 10, 1, key="num_apps")
+
 base_year = int(curr_fy.split(" ")[1].split("-")[0])
 target_years = [2022, 2023, 2024, 2025, 2026]
 
@@ -98,119 +95,95 @@ if 'loans' not in st.session_state: st.session_state.loans = []
 total_detailed_emi = 0.0
 fy_interest_totals = {2022: 0.0, 2023: 0.0, 2024: 0.0, 2025: 0.0, 2026: 0.0}
 
-# --- PART 3: OBLIGATIONS ---
-st.divider()
-st.header("2. Loan Obligations & Date Logic")
-if st.button("➕ Add Loan Row"):
+# --- PART 3: LOAN OBLIGATIONS ---
+st.header("2. Loan Obligations")
+if st.button("➕ Add Loan"):
     st.session_state.loans.append({
-        "amt": 1000000.0, "roi": 9.0, "tenure_months": 120,
-        "start": date(2021, 4, 1), "pre_closure": None,
-        "add_int": True, "obligate": True, "is_manual": False, "manual_emi_val": 0.0
+        "amt": 1000000.0, "roi": 9.0, "tenure": 120, "start": date(2021, 4, 1),
+        "add_int": True, "obligate": True, "is_man": False, "man_val": 0.0
     })
 
 for idx, loan in enumerate(st.session_state.loans):
     with st.container(border=True):
-        st.subheader(f"Loan Row {idx+1}")
+        st.subheader(f"Loan {idx+1}")
         l1, l2, l3, l4 = st.columns(4)
+        amt = l1.number_input("Amount", key=f"la_{idx}", value=loan['amt'])
+        roi = l1.number_input("ROI %", key=f"lr_{idx}", value=loan['roi'])
         
-        amt = l1.number_input(f"Loan Amount", key=f"la_{idx}", value=loan['amt'])
-        roi = l1.number_input(f"ROI %", key=f"lr_{idx}", value=loan['roi'])
+        is_man = l2.checkbox("Manual EMI?", key=f"lm_check_{idx}", value=loan.get('is_man', False))
+        tenure = l2.number_input("Tenure (Mo)", key=f"lt_{idx}", value=loan.get('tenure', 120))
         
-        is_manual = l2.checkbox("Manual EMI?", key=f"lm_check_{idx}", value=loan.get('is_manual', False))
-        tenure_mo = l2.number_input(f"Tenure (Mo)", key=f"lt_{idx}", value=loan.get('tenure_months', 120))
+        start_dt = l3.date_input("Start", key=f"ls_{idx}", value=loan['start'])
+        mat_dt = start_dt + relativedelta(months=int(tenure))
+        st.caption(f"Maturity: {mat_dt.strftime('%d-%m-%Y')}")
         
-        start_dt = l3.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
-        maturity_dt = start_dt + relativedelta(months=int(tenure_mo))
-        st.caption(f"Auto Maturity: {maturity_dt.strftime('%d-%m-%Y')}")
-        
-        pre_closure = l3.date_input("Pre-closure Date (Optional)", key=f"lpc_{idx}", value=None if loan.get('pre_closure') == "None" else loan.get('pre_closure'))
-        final_end_date = pre_closure if pre_closure else maturity_dt
-
-        if is_manual:
-            active_emi = l2.number_input(f"Manual EMI", key=f"le_man_{idx}", value=loan.get('manual_emi_val', 0.0))
+        if is_man: emi_val = l2.number_input("EMI", key=f"le_man_{idx}", value=loan.get('man_val', 0.0))
         else:
-            if amt > 0 and roi > 0 and tenure_mo > 0:
-                r = (roi / 12) / 100
-                active_emi = (amt * r * (1 + r)**tenure_mo) / ((1 + r)**tenure_mo - 1)
-                st.caption(f"EMI: ₹{active_emi:,.0f}")
-            else: active_emi = 0.0
+            r = (roi / 12) / 100
+            emi_val = (amt * r * (1 + r)**tenure) / ((1 + r)**tenure - 1) if amt > 0 and roi > 0 else 0.0
+        
+        add_int = l4.checkbox("Add Int?", key=f"lab_{idx}", value=loan['add_int'])
+        obli = l4.checkbox("Obligate?", key=f"lob_{idx}", value=loan['obligate'])
 
-        add_int_check = l4.checkbox("Add Int to Income?", key=f"lab_{idx}", value=loan['add_int'])
-        obligate_check = l4.checkbox("Obligate EMI?", key=f"lob_{idx}", value=loan['obligate'])
-
-        if amt > 0 and active_emi > 0:
-            temp_bal = amt
-            schedule = []
-            for y in range(start_dt.year, final_end_date.year + 1):
-                yr_int = temp_bal * (roi / 100)
-                yr_prin = (active_emi * 12) - yr_int
+        if amt > 0 and emi_val > 0:
+            bal, sch = amt, []
+            for y in range(start_dt.year, mat_dt.year + 1):
+                y_i = bal * (roi / 100)
+                y_p = (emi_val * 12) - y_i
                 if y in target_years:
-                    schedule.append({"FY": f"FY {y}-{str(y+1)[2:]}", "Interest": round(yr_int, 2), "Principal": round(max(0, yr_prin), 2)})
-                    if add_int_check: fy_interest_totals[y] += yr_int
-                temp_bal = max(0, temp_bal - yr_prin)
-                if temp_bal == 0: break
-            if schedule: st.dataframe(pd.DataFrame(schedule), hide_index=True)
+                    sch.append({"FY": f"{y}-{str(y+1)[2:]}", "Int": round(y_i, 0), "Prin": round(max(0, y_p), 0)})
+                    if add_int: fy_interest_totals[y] += y_i
+                bal = max(0, bal - y_p)
+                if bal <= 0: break
+            if sch: st.dataframe(pd.DataFrame(sch), hide_index=True, use_container_width=True)
+        if obli and date.today() < mat_dt: total_detailed_emi += emi_val
 
-        if obligate_check and date.today() < final_end_date:
-            total_detailed_emi += active_emi
-
-# --- PART 4: APPLICANT DETAILS ---
-st.divider()
-st.header("3. Applicant Details & Financials")
-num_apps = st.number_input("No. of Applicants", 1, 10, 1, key="num_apps")
-total_emi_capacity = 0.0
-
+# --- PART 4: FINANCIALS ---
+st.header("3. Applicant Financials")
+total_cap = 0.0
 for i in range(int(num_apps)):
     with st.expander(f"Applicant {i+1}", expanded=True):
-        c_n, c_f = st.columns([2, 1])
-        name = c_n.text_input(f"Name", key=f"name_{i}")
-        foir = c_f.number_input(f"FOIR %", 10, 100, 60, key=f"foir_{i}")
-        avg_m = st.radio(f"Avg Method", ["2 Yrs", "3 Yrs"], key=f"avg_m_{i}", horizontal=True)
+        c_n, c_f, c_a = st.columns([2, 1, 1])
+        name = c_n.text_input("Name", key=f"name_{i}")
+        foir = c_f.number_input("FOIR %", 10, 100, 60, key=f"foir_{i}")
+        meth = c_a.radio("Avg", ["2Y", "3Y"], key=f"avg_m_{i}", horizontal=True)
 
-        years_display = [f"FY {base_year}-{str(base_year+1)[2:]}", f"FY {base_year-1}-{str(base_year)[2:]}", f"FY {base_year-2}-{str(base_year-1)[2:]}"]
         c1, c2, c3 = st.columns(3)
-        annual_flows = []
-        
-        for idx, yr_label in enumerate(years_display):
-            y_int = int(yr_label.split(" ")[1].split("-")[0])
+        flows = []
+        for idx in range(3):
+            yr_val = base_year - idx
             with [c1, c2, c3][idx]:
-                st.markdown(f"**{yr_label}**")
-                n = st.number_input(f"NPBT", key=f"npbt_{i}_{idx}", value=0.0)
-                d = st.number_input(f"Dep.", key=f"dep_{i}_{idx}", value=0.0)
-                auto_int = fy_interest_totals.get(y_int, 0.0)
-                st.caption(f"Loan Int Sync: ₹{auto_int:,.0f}")
-                man_add = st.number_input(f"Manual Add", key=f"int_{i}_{idx}", value=0.0)
-                f_d = min(d, max(0.0, n)) if st.checkbox("Restr. Dep", key=f"re_{i}_{idx}", value=True) else d
-                flow = n + f_d + auto_int + man_add
-                annual_flows.append(flow)
+                st.markdown(f"**FY {yr_val}-{str(yr_val+1)[2:]}**")
+                n_p = st.number_input("NPBT", key=f"npbt_{i}_{idx}", value=0.0)
+                dep = st.number_input("Dep", key=f"dep_{i}_{idx}", value=0.0)
+                s_i = fy_interest_totals.get(yr_val, 0.0)
+                st.caption(f"Int Sync: {s_i:,.0f}")
+                restr = st.checkbox("Restr", key=f"re_{i}_{idx}", value=True)
+                f_d = min(dep, max(0.0, n_p)) if restr else dep
+                fl = n_p + f_d + s_i + st.number_input("Man.Add", key=f"int_{i}_{idx}", value=0.0)
+                flows.append(fl)
+        
+        avg = (sum(flows[:2])/2) if meth == "2Y" else (sum(flows)/3)
+        cap = (avg / 12) * (foir / 100)
+        total_cap += cap
+        st.write(f"EMI Capacity: **₹{cap:,.0f}**")
 
-        avg_p = (sum(annual_flows[:2])/2) if avg_m == "2 Yrs" else (sum(annual_flows)/3)
-        cap = (avg_p / 12) * (foir / 100)
-        total_emi_capacity += cap
-        st.info(f"EMI Capacity: ₹{cap:,.0f}")
+# --- PART 5: FINAL ---
+st.header("4. Result")
+man_emi = st.number_input("Other EMIs", value=0.0)
+net_emi = total_cap - (man_emi + total_detailed_emi)
 
-# --- PART 5: FINAL RESULTS ---
-st.divider()
-st.header("4. Eligibility Result")
-manual_emi_global = st.number_input("Other EMIs", value=0.0)
-total_load = manual_emi_global + total_detailed_emi
+r_p, t_p = st.columns(2)
+n_r = r_p.number_input("New ROI %", value=9.5)
+n_t = t_p.number_input("New Tenure (Yrs)", value=15)
 
-p1, p2 = st.columns(2)
-n_roi = p1.number_input("Rate %", value=9.5)
-n_ten = p2.number_input("Tenure (Yrs)", value=15)
-
-max_new_emi = total_emi_capacity - total_load
-
-if max_new_emi > 0:
-    r, n = (n_roi/12)/100, n_ten * 12
-    max_loan = max_new_emi * ((1 - (1 + r)**-n) / r)
-    st.success(f"### Max Loan: ₹{max_loan:,.0f}")
+if net_emi > 0:
+    r_v, n_v = (n_r/12)/100, n_t * 12
+    max_l = net_emi * ((1 - (1 + r_v)**-n_v) / r_v)
+    st.success(f"### Eligibility: ₹{max_l:,.0f}")
     
-    report_data = {"Metric": ["Customer", "EMI Capacity", "EMI Load", "Net EMI", "Loan Eligibility"],
-                   "Value": [client_name, f"{total_emi_capacity:,.0f}", f"{total_load:,.0f}", f"{max_new_emi:,.0f}", f"{max_loan:,.0f}"]}
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        pd.DataFrame(report_data).to_excel(writer, index=False)
-    st.download_button("📥 Excel", data=buffer.getvalue(), file_name=f"Loan_{client_name}.xlsx")
-else:
-    st.error("Negative eligibility.")
+    res_df = pd.DataFrame({"Item": ["Net EMI", "Loan"], "Value": [f"{net_emi:,.0f}", f"{max_l:,.0f}"]})
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='xlsxwriter') as writer: res_df.to_excel(writer, index=False)
+    st.download_button("📥 Excel", buf.getvalue(), f"Loan_{c_name}.xlsx")
+else: st.error("No Eligibility")
