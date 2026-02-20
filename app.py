@@ -12,49 +12,13 @@ st.set_page_config(page_title="CA Loan Master Pro", layout="wide", page_icon="âš
 # --- CUSTOM CSS FOR ENHANCED FONT SIZES (18px+) ---
 st.markdown("""
     <style>
-    /* Global font size increased to 18px */
-    html, body, [class*="css"] { 
-        font-size: 18px !important; 
-    }
-    
-    /* Section Headings (1. Assessment Settings, etc.) */
-    h2 { 
-        font-size: 22px !important; 
-        margin-top: 15px !important; 
-        margin-bottom: 8px !important; 
-        color: #1E3A8A; 
-        font-weight: bold !important; 
-        border-bottom: 2px solid #eee;
-    }
-    
-    /* Row Headings like 'Loan Analysis' */
-    h3 { 
-        font-size: 19px !important; 
-        margin-top: 8px !important; 
-        margin-bottom: 8px !important; 
-        font-weight: bold !important; 
-    }
-
-    /* Target Tables/Dataframes (Your 2nd Image) */
-    .stDataFrame div, .stTable td, .stTable th { 
-        font-size: 18px !important; 
-    }
-
-    /* Input labels, text inputs, and select boxes */
-    label, .stTextInput input, .stSelectbox div, .stNumberInput input { 
-        font-size: 18px !important; 
-    }
-
-    /* Sidebar text */
-    [data-testid="stSidebar"] { 
-        font-size: 18px !important; 
-    }
-
-    /* Adjust vertical spacing to accommodate larger text */
-    [data-testid="stVerticalBlock"] > div { 
-        padding-top: 0.2rem !important; 
-        padding-bottom: 0.2rem !important; 
-    }
+    html, body, [class*="css"] { font-size: 18px !important; }
+    h2 { font-size: 22px !important; margin-top: 15px !important; margin-bottom: 8px !important; color: #1E3A8A; font-weight: bold !important; border-bottom: 2px solid #eee; }
+    h3 { font-size: 19px !important; margin-top: 8px !important; margin-bottom: 8px !important; font-weight: bold !important; }
+    .stDataFrame div, .stTable td, .stTable th { font-size: 18px !important; }
+    label, .stTextInput input, .stSelectbox div, .stNumberInput input { font-size: 18px !important; }
+    [data-testid="stSidebar"] { font-size: 18px !important; }
+    [data-testid="stVerticalBlock"] > div { padding-top: 0.2rem !important; padding-bottom: 0.2rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -137,30 +101,40 @@ for idx, loan in enumerate(st.session_state.loans):
         is_man = l2.checkbox("Manual EMI?", key=f"lm_check_{idx}", value=loan.get('is_man', False))
         tenure = l2.number_input("Tenure (Mo)", key=f"lt_{idx}", value=loan.get('tenure', 120))
         
+        # EMI CALCULATION (ALWAYS RUNS)
+        if amt > 0 and roi > 0 and tenure > 0:
+            r_rate = (roi / 12) / 100
+            system_calc_emi = (amt * r_rate * (1 + r_rate)**tenure) / ((1 + r_rate)**tenure - 1)
+        else:
+            system_calc_emi = 0.0
+
+        # DISPLAY SYSTEM EMI REGARDLESS OF TOGGLE
+        l2.info(f"System EMI: â‚¹{system_calc_emi:,.0f}")
+
         start_dt = l3.date_input("Start Date", key=f"ls_{idx}", value=loan['start'])
         mat_dt = start_dt + relativedelta(months=int(tenure))
         st.caption(f"Maturity: {mat_dt.strftime('%d-%m-%Y')}")
         
-        if is_man: emi_val = l2.number_input("EMI", key=f"le_man_{idx}", value=loan.get('man_val', 0.0))
+        if is_man: 
+            active_emi = l2.number_input("Enter Manual EMI", key=f"le_man_{idx}", value=loan.get('man_val', 0.0))
         else:
-            r = (roi / 12) / 100
-            emi_val = (amt * r * (1 + r)**tenure) / ((1 + r)**tenure - 1) if amt > 0 and roi > 0 else 0.0
-        
+            active_emi = system_calc_emi
+
         add_int = l4.checkbox("Add Int to Income?", key=f"lab_{idx}", value=loan['add_int'])
         obli = l4.checkbox("Obligate EMI?", key=f"lob_{idx}", value=loan['obligate'])
 
-        if amt > 0 and emi_val > 0:
+        if amt > 0 and active_emi > 0:
             bal, sch = amt, []
             for y in range(start_dt.year, mat_dt.year + 1):
                 y_i = bal * (roi / 100)
-                y_p = (emi_val * 12) - y_i
+                y_p = (active_emi * 12) - y_i
                 if y in target_years:
                     sch.append({"FY": f"{y}-{str(y+1)[2:]}", "Int Paid": round(y_i, 0), "Prin Paid": round(max(0, y_p), 0)})
                     if add_int: fy_interest_totals[y] += y_i
                 bal = max(0, bal - y_p)
                 if bal <= 0: break
             if sch: st.dataframe(pd.DataFrame(sch), hide_index=True, use_container_width=True)
-        if obli and date.today() < mat_dt: total_detailed_emi += emi_val
+        if obli and date.today() < mat_dt: total_detailed_emi += active_emi
 
 # --- PART 4: APPLICANT DETAILS ---
 st.header("3. Applicant Details & Financials")
