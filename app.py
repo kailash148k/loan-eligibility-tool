@@ -9,51 +9,32 @@ import io
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="CA Loan Master Pro", layout="wide", page_icon="⚖️")
 
-# --- PART 1: DYNAMIC ZOOM CONTROLS (SIDEBAR) ---
+# --- PART 1: DYNAMIC ZOOM CONTROLS ---
 with st.sidebar:
     st.header("🔍 Zoom & View Settings")
     
-    # Sliders for independent control
-    app_zoom = st.slider("Global Font Size", 10, 30, 18, help="Adjusts everything")
-    sidebar_zoom = st.slider("Sidebar Font Size", 10, 30, 18, help="Adjusts left side only")
-    main_zoom = st.slider("Workspace Font Size", 10, 30, 18, help="Adjusts right side only")
+    # Reset Button for Zoom
+    if st.button("🔄 Reset Zoom to Default"):
+        st.session_state.app_zoom = 18
+        st.session_state.sidebar_zoom = 18
+        st.session_state.main_zoom = 18
 
-# --- INJECT DYNAMIC CSS BASED ON SLIDERS ---
+    # Sliders using session state to allow resetting
+    app_zoom = st.slider("Global Font Size", 10, 30, st.session_state.get('app_zoom', 18), key="app_zoom")
+    sidebar_zoom = st.slider("Sidebar Font Size", 10, 30, st.session_state.get('sidebar_zoom', 18), key="sidebar_zoom")
+    main_zoom = st.slider("Workspace Font Size", 10, 30, st.session_state.get('main_zoom', 18), key="main_zoom")
+
+# --- INJECT DYNAMIC CSS ---
 st.markdown(f"""
     <style>
-    /* Global Base */
-    html, body, [class*="css"] {{ 
-        font-size: {app_zoom}px !important; 
-    }}
-    
-    /* Left Sidebar Portion */
-    [data-testid="stSidebar"] {{ 
-        font-size: {sidebar_zoom}px !important; 
-    }}
-    [data-testid="stSidebar"] .stMarkdown p, 
-    [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] button {{ 
-        font-size: {sidebar_zoom}px !important; 
-    }}
-
-    /* Right Main Portion */
-    [data-testid="stMain"] {{ 
-        font-size: {main_zoom}px !important; 
-    }}
+    html, body, [class*="css"] {{ font-size: {app_zoom}px !important; }}
+    [data-testid="stSidebar"] {{ font-size: {sidebar_zoom}px !important; }}
+    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] button {{ font-size: {sidebar_zoom}px !important; }}
+    [data-testid="stMain"] {{ font-size: {main_zoom}px !important; }}
     [data-testid="stMain"] h2 {{ font-size: {main_zoom + 4}px !important; }}
     [data-testid="stMain"] h3 {{ font-size: {main_zoom + 2}px !important; }}
-    [data-testid="stMain"] label, 
-    [data-testid="stMain"] .stMarkdown p, 
-    [data-testid="stMain"] .stTable td, 
-    [data-testid="stMain"] .stDataFrame div {{ 
-        font-size: {main_zoom}px !important; 
-    }}
-    
-    /* Spacing fixes */
-    [data-testid="stVerticalBlock"] > div {{ 
-        padding-top: 0.1rem !important; 
-        padding-bottom: 0.1rem !important; 
-    }}
+    [data-testid="stMain"] label, [data-testid="stMain"] .stMarkdown p, [data-testid="stMain"] .stTable td, [data-testid="stMain"] .stDataFrame div {{ font-size: {main_zoom}px !important; }}
+    [data-testid="stVerticalBlock"] > div {{ padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -71,7 +52,7 @@ def save_db(data):
 
 if 'db' not in st.session_state: st.session_state.db = load_db()
 
-# --- PART 2: BRANDING & PROFILE MANAGEMENT ---
+# --- BRANDING & PROFILE MANAGEMENT ---
 st.title("⚖️ Loan Eligibility Assessment Tool")
 st.markdown("**CA KAILASH MALI | 7737306376 | Udaipur**")
 
@@ -106,11 +87,12 @@ with st.sidebar:
                 else: st.session_state[k] = v
             st.rerun()
 
-# --- PART 3: ASSESSMENT SETTINGS ---
+# --- PART 2: ASSESSMENT SETTINGS ---
 st.header("1. Assessment Settings")
 col_fy, col_apps = st.columns(2)
 curr_fy = col_fy.selectbox("Current Assessment FY", ["FY 2024-25", "FY 2025-26"], index=0, key="global_fy")
-num_apps = col_apps.number_input("How many applicants?", 1, 10, 1, key="num_apps")
+# THIS IS THE PRIMARY KEY FOR APPLICANTS
+num_apps = col_apps.number_input("How many applicants?", 1, 10, 1, key="num_apps_global")
 
 base_year = int(curr_fy.split(" ")[1].split("-")[0])
 target_years = [2022, 2023, 2024, 2025, 2026]
@@ -119,7 +101,7 @@ if 'loans' not in st.session_state: st.session_state.loans = []
 total_detailed_emi = 0.0
 fy_interest_totals = {2022: 0.0, 2023: 0.0, 2024: 0.0, 2025: 0.0, 2026: 0.0}
 
-# --- PART 4: LOAN OBLIGATIONS ---
+# --- PART 3: LOAN OBLIGATIONS ---
 st.header("2. Current Monthly Obligations")
 if st.button("➕ Add Detailed Loan Row"):
     st.session_state.loans.append({
@@ -137,7 +119,6 @@ for idx, loan in enumerate(st.session_state.loans):
         is_man = l2.checkbox("Manual EMI?", key=f"lm_check_{idx}", value=loan.get('is_man', False))
         tenure = l2.number_input("Tenure (Mo)", key=f"lt_{idx}", value=loan.get('tenure', 120))
         
-        # EMI Calculations
         if amt > 0 and roi > 0 and tenure > 0:
             r_rate = (roi / 12) / 100
             sys_emi = (amt * r_rate * (1 + r_rate)**tenure) / ((1 + r_rate)**tenure - 1)
@@ -167,12 +148,13 @@ for idx, loan in enumerate(st.session_state.loans):
             if sch: st.dataframe(pd.DataFrame(sch), hide_index=True, use_container_width=True)
         if obli and date.today() < mat_dt: total_detailed_emi += active_emi
 
-# --- PART 5: FINANCIALS & FINAL RESULTS ---
+# --- PART 4: APPLICANT DETAILS & FINANCIALS ---
 st.header("3. Applicant Details & Financials")
-num_apps_in = st.number_input("How many applicants?", 1, 10, 1, key="num_apps")
+# REMOVED: The duplicate number_input here. It now uses 'num_apps' from Section 1.
 total_cap = 0.0
-for i in range(int(num_apps_in)):
-    with st.expander(f"Applicant {i+1}", expanded=True):
+
+for i in range(int(num_apps)):
+    with st.expander(f"Applicant {i+1} - {st.session_state.get(f'name_{i}', 'Details')}", expanded=True):
         c_n, c_f, c_a = st.columns([2, 1, 1])
         name = c_n.text_input("Name", key=f"name_{i}")
         foir = c_f.number_input("FOIR %", 10, 100, 60, key=f"foir_{i}")
@@ -196,8 +178,9 @@ for i in range(int(num_apps_in)):
         avg = (sum(flows[:2])/2) if meth == "2Y" else (sum(flows)/3)
         cap = (avg / 12) * (foir / 100)
         total_cap += cap
-        st.write(f"EMI Capacity: **₹{cap:,.0f}**")
+        st.write(f"Monthly EMI Capacity: **₹{cap:,.0f}**")
 
+# --- PART 5: FINAL RESULTS ---
 st.header("4. Eligibility Results")
 man_emi_ext = st.number_input("Other Manual EMIs", value=0.0)
 net_emi_final = total_cap - (man_emi_ext + total_detailed_emi)
@@ -213,6 +196,6 @@ if net_emi_final > 0:
     
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-        pd.DataFrame({"Metric": ["Net EMI", "Loan"], "Value": [net_emi_final, eligible_loan]}).to_excel(writer, index=False)
-    st.download_button("📥 Export", buf.getvalue(), f"Loan_{c_name}.xlsx")
-else: st.error("No eligibility found.")
+        pd.DataFrame({"Metric": ["Net EMI Available", "Eligible Loan"], "Value": [f"{net_emi_final:,.0f}", f"{eligible_loan:,.0f}"]}).to_excel(writer, index=False)
+    st.download_button("📥 Export to Excel", buf.getvalue(), f"Loan_{c_name}.xlsx")
+else: st.error("Obligations exceed FOIR capacity.")
