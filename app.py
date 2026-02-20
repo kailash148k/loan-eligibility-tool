@@ -10,6 +10,7 @@ import io
 st.set_page_config(page_title="CA Loan Master Pro", layout="wide", page_icon="⚖️")
 
 # --- PART 1: DYNAMIC ZOOM CONTROLS ---
+# Using session state to ensure sliders persist correctly
 if 'app_zoom' not in st.session_state: st.session_state.app_zoom = 18
 if 'sidebar_zoom' not in st.session_state: st.session_state.sidebar_zoom = 18
 if 'main_zoom' not in st.session_state: st.session_state.main_zoom = 18
@@ -121,6 +122,7 @@ for idx, loan in enumerate(st.session_state.loans):
         is_man = l2.checkbox("Manual EMI?", key=f"lm_check_{idx}", value=loan.get('is_man', False))
         tenure = l2.number_input("Tenure (Mo)", key=f"lt_{idx}", value=loan.get('tenure', 120))
         
+        # Always calculate System EMI for comparison
         if amt > 0 and roi > 0 and tenure > 0:
             r_rate = (roi / 12) / 100
             sys_emi = (amt * r_rate * (1 + r_rate)**tenure) / ((1 + r_rate)**tenure - 1)
@@ -185,7 +187,7 @@ st.header("4. Eligibility Results")
 
 
 # Dynamic Box for Other EMIs
-col_count, col_total = st.columns([1, 2])
+col_count, col_dummy = st.columns([1, 2])
 with col_count:
     num_other_emis = st.number_input("How many other EMIs?", 0, 20, 0, key="num_other_count")
 
@@ -211,8 +213,12 @@ if net_emi_final > 0:
     eligible_loan = net_emi_final * ((1 - (1 + r_v)**-n_v) / r_v)
     st.success(f"### Maximum Eligible Loan: ₹{eligible_loan:,.0f}")
     
+    # Minimal Excel Export
+    res_summary = pd.DataFrame({"Metric": ["Net EMI Available", "Eligible Loan"], "Value": [f"{net_emi_final:,.0f}", f"{eligible_loan:,.0f}"]})
     buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-        pd.DataFrame({"Metric": ["Net EMI", "Eligible Loan"], "Value": [f"{net_emi_final:,.0f}", f"{eligible_loan:,.0f}"]}).to_excel(writer, index=False)
-    st.download_button("📥 Export to Excel", buf.getvalue(), f"Loan_{c_name}.xlsx")
-else: st.error("Obligations exceed FOIR capacity.")
+    with pd.ExcelWriter(buf, engine='xlsxwriter') as writer: 
+        res_summary.to_excel(writer, index=False)
+    
+    st.download_button("📥 Export to Excel", buf.getvalue(), f"Loan_Eligibility_{c_name}.xlsx")
+else: 
+    st.error("Obligations exceed FOIR capacity.")
