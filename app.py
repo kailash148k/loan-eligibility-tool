@@ -21,18 +21,28 @@ def load_db():
 
 def save_db(data):
     with open(DB_FILE, "w") as f:
-        # default=str converts date objects to text so JSON can save them
+        # default=str handles date objects during JSON conversion
         json.dump(data, f, indent=4, default=str)
 
-# Initialize database in session state
+# Initialize database in session state if not present
 if 'db' not in st.session_state:
     st.session_state.db = load_db()
 
-# --- PART 1: BRANDING & SIDEBAR ---
+# --- PART 1: BRANDING & SIDEBAR (PROFILE MANAGEMENT) ---
 st.title("⚖️ Loan Eligibility Assessment Tool")
 st.markdown("#### CA KAILASH MALI | 7737306376 | Udaipur")
 
 st.sidebar.header("📁 Client Profile Management")
+
+# NEW: RESET BUTTON
+if st.sidebar.button("🆕 Start New Assessment (Reset)"):
+    current_db = st.session_state.db
+    st.session_state.clear()
+    st.session_state.db = current_db
+    st.rerun()
+
+st.sidebar.divider()
+
 client_name = st.sidebar.text_input("Customer Name", placeholder="e.g. Rajesh Kumar")
 
 # SAVE FUNCTION
@@ -53,8 +63,13 @@ selected_profile = st.sidebar.selectbox("📂 Load Saved Profile", ["-- Select -
 if st.sidebar.button("🔄 Load Profile"):
     if selected_profile != "-- Select --":
         profile_data = st.session_state.db[selected_profile]
+        # Clear current screen data before loading
+        current_db = st.session_state.db
+        st.session_state.clear()
+        st.session_state.db = current_db
+        
         for k, v in profile_data.items():
-            # Convert date strings back to date objects if needed
+            # Convert date strings back to Python date objects
             if isinstance(v, str) and len(v) == 10 and v.count("-") == 2:
                 try:
                     st.session_state[k] = date.fromisoformat(v)
@@ -95,7 +110,7 @@ for i in range(int(num_apps)):
                 curr_rent = st.number_input(f"Current Rent", key=f"cr_{i}_{idx}", value=0.0)
                 fut_rent = st.number_input(f"Future Rent", key=f"fr_{i}_{idx}", value=0.0)
                 
-                # Logic: If NPBT is negative, we usually restrict depreciation add-back
+                # Depreciation add-back logic
                 f_dep = min(dep, max(0.0, npbt)) if st.checkbox("Restrict Dep", key=f"re_{i}_{idx}", value=True) else dep
                 cash_flow = npbt + f_dep + int_tl_man + fam_sal + curr_rent + fut_rent
                 annual_cash_flows.append(cash_flow)
@@ -126,7 +141,6 @@ if st.button("➕ Add Detailed Loan Row"):
 total_detailed_emi = 0.0
 total_auto_interest_addback = 0.0
 
-# Loop through and render detailed loans
 for idx, loan in enumerate(st.session_state.loans):
     with st.container(border=True):
         st.write(f"**Loan Row {idx+1}**")
@@ -143,9 +157,9 @@ for idx, loan in enumerate(st.session_state.loans):
         with l4:
             obligate_check = st.checkbox("Obligate EMI?", key=f"lob_{idx}", value=loan['obligate'])
 
-        # Amortization logic for interest add-back
         if amt > 0 and emi > 0:
             temp_bal = amt
+            # Simple amortization loop to find interest for the assessment year
             for y in range(start_dt.year, base_year + 1):
                 yr_int = temp_bal * (roi / 100)
                 temp_bal = max(0, temp_bal - ((emi * 12) - yr_int))
@@ -156,6 +170,7 @@ for idx, loan in enumerate(st.session_state.loans):
             total_detailed_emi += emi
 
 total_emi_load = manual_emi + total_detailed_emi
+# Interest add-back converted to monthly capacity at standard 60% FOIR
 monthly_interest_addback_cap = (total_auto_interest_addback / 12) * 0.60
 
 # --- PART 4: FINAL ELIGIBILITY RESULTS ---
@@ -165,19 +180,18 @@ p1, p2, p3 = st.columns(3)
 with p1: n_roi = st.number_input("New Loan Rate %", value=9.5, key="n_roi")
 with p2: n_ten = st.number_input("New Tenure (Years)", value=15, key="n_ten")
 
-# Final calculation
 max_new_emi = (total_emi_capacity + monthly_interest_addback_cap) - total_emi_load
 
 if max_new_emi > 0:
-    # Present Value formula for loan eligibility
     r_val = (n_roi/12)/100
     n_val = n_ten * 12
+    # Present Value Formula
     max_loan = max_new_emi * ((1 - (1 + r_val)**-n_val) / r_val)
     
     st.success(f"### Estimated Maximum Loan: ₹{max_loan:,.0f}")
-    st.info(f"Total Combined EMI Capacity: ₹{(total_emi_capacity + monthly_interest_addback_cap):,.0f} | Existing EMI: ₹{total_emi_load:,.0f}")
+    st.info(f"Total Monthly Capacity: ₹{(total_emi_capacity + monthly_interest_addback_cap):,.0f} | Running EMI: ₹{total_emi_load:,.0f}")
 else:
-    st.error("No eligibility found based on current financials and obligations.")
+    st.error("No eligibility found. Monthly obligations exceed FOIR capacity.")
 
 st.sidebar.markdown("---")
 st.sidebar.write("Developed for CA Practice")
